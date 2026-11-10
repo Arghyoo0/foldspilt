@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "FoldSplit — Group Expense & Event Finance",
+  "short_name": "FoldSplit",
+  "description": "Real-time group expense splitting, event links, and direct UPI settlements.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#5c85ff",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
