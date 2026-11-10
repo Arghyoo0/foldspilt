@@ -1,0 +1,2815 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FoldSplit — Group Expense & Event Finance</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        fold: {
+                            bg: '#000000',
+                            card: '#121316',
+                            cardHover: '#17191d',
+                            border: '#23252a',
+                            pill: '#1d1f24',
+                            blue: '#5c85ff',
+                            blueText: '#6892ff',
+                            navyPill: '#152036',
+                            green: '#28c76f',
+                            red: '#ff6b6b',
+                            amber: '#f59e0b',
+                            muted: '#8b8e96'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+        ::-webkit-scrollbar {
+            width: 0px;
+            height: 0px;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Fold Signature Card Styling */
+        .fold-card {
+            background-color: #121316;
+            border: 1px solid #23252a;
+            border-radius: 22px;
+        }
+        .fold-subcard {
+            background-color: #181a1f;
+            border: 1px solid #262930;
+            border-radius: 16px;
+        }
+        /* Fold Bottom Navigation Dock */
+        .fold-dock {
+            background-color: rgba(18, 19, 22, 0.94);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid #26282e;
+            border-radius: 9999px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
+        }
+        .fold-dock-active {
+            background-color: #292b32;
+            border-radius: 9999px;
+        }
+        /* Fold Periwinkle Blue Card */
+        .fold-blue-card {
+            background: linear-gradient(180deg, #648dff 0%, #527bf7 100%);
+            border-radius: 18px;
+            color: #060913;
+        }
+        /* Fold Calendar Date Badge (Red top bar, white body) */
+        .cal-badge {
+            width: 44px;
+            height: 46px;
+            border-radius: 12px;
+            background: #ffffff;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            flex-shrink: 0;
+        }
+        .cal-badge-top {
+            width: 100%;
+            height: 11px;
+            background: #ef4444;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen flex justify-center selection:bg-fold-blue selection:text-white">
+
+    <!-- Hidden File Input for PFP Upload (Used in Onboarding & Profile Overlay) -->
+    <input type="file" id="globalPfpFileInput" accept="image/*" class="hidden" onchange="handlePfpFileSelected(event)">
+
+    <!-- MOBILE APP SHELL CONTAINER -->
+    <div class="w-full max-w-[430px] min-h-screen bg-black relative pb-28 sm:border-x sm:border-[#1a1c20] shadow-2xl">
+
+        <!-- TOAST NOTIFICATION CONTAINER -->
+        <div id="toastContainer" class="fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-[90] flex flex-col gap-2 pointer-events-none"></div>
+
+        <!-- ===================================================================
+             FIRST-TIME USER ONBOARDING SCREEN (Newly Installed App Setup)
+        ==================================================================== -->
+        <div id="onboardingScreen" class="fixed inset-0 z-[70] hidden bg-black overflow-y-auto flex justify-center animate-fade">
+            <div class="w-full max-w-[430px] min-h-screen px-5 py-8 flex flex-col justify-between">
+                <div class="space-y-6">
+                    <!-- Brand Header -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-9 h-9 rounded-full bg-[#191b20] border border-[#2c303a] flex items-center justify-center text-white">
+                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M12 3C15.5 5.5 16.5 14 12 21C17 21 21 17 21 12C21 7 17 3 12 3Z" fill="currentColor"/>
+                                </svg>
+                            </div>
+                            <span class="text-lg font-bold tracking-tight text-white">FoldSplit</span>
+                        </div>
+                        <span class="px-2.5 py-1 rounded-full bg-[#15171c] border border-[#262930] text-[11px] font-mono text-fold-muted">
+                            v1.0 • Web Link
+                        </span>
+                    </div>
+
+                    <div class="space-y-1.5 pt-2">
+                        <h1 class="text-[28px] font-extrabold tracking-tight text-white leading-tight">Set up your profile</h1>
+                        <p class="text-sm text-[#8b8e96] leading-relaxed">
+                            No app download needed. Your profile and hardware device ID are automatically linked to every expense you add.
+                        </p>
+                    </div>
+
+                    <!-- Invited Event Banner (Shown if user opened a shared ?event= link) -->
+                    <div id="onboardingInviteBanner" class="hidden fold-card p-3.5 border-fold-blue/40 bg-fold-navyPill/40 flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-fold-blue text-black flex items-center justify-center font-extrabold text-sm shrink-0">
+                            <i class="fa-solid fa-link"></i>
+                        </div>
+                        <div class="text-xs">
+                            <div class="text-white font-bold">Joining Shared Event Link</div>
+                            <div id="onboardingInviteCodeText" class="text-fold-blueText font-mono mt-0.5"></div>
+                        </div>
+                    </div>
+
+                    <!-- Avatar / PFP Upload Picker -->
+                    <div class="fold-card p-5 flex flex-col items-center text-center space-y-3">
+                        <div onclick="triggerPfpUpload()" class="relative cursor-pointer group">
+                            <img id="onboardingPfpPreview" src="" alt="Profile Picture" class="w-24 h-24 rounded-full object-cover border-2 border-[#2e323b] group-hover:border-fold-blue transition">
+                            <div class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-fold-blue text-black flex items-center justify-center shadow-lg border-2 border-black">
+                                <i class="fa-solid fa-camera text-xs"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <button type="button" onclick="triggerPfpUpload()" class="text-xs font-bold text-fold-blueText hover:underline">
+                                Upload Profile Photo
+                            </button>
+                            <p class="text-[11px] text-[#787b84] mt-0.5">Shown on your transactions & event splits</p>
+                        </div>
+                    </div>
+
+                    <!-- Form Inputs (Name & UPI ID) -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs font-semibold text-[#9ca3af] block mb-1.5">Your Name <span class="text-fold-red">*</span></label>
+                            <input type="text" id="onboardingNameInput" placeholder="e.g. Arghya" class="w-full px-4 py-3.5 rounded-2xl bg-[#121316] border border-[#262930] text-base font-semibold text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue transition">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-semibold text-[#9ca3af] block mb-1.5">Your UPI ID <span class="text-[#686b73] font-normal">(for receiving direct payments)</span></label>
+                            <input type="text" id="onboardingUpiInput" placeholder="e.g. yourname@okaxis" class="w-full px-4 py-3.5 rounded-2xl bg-[#121316] border border-[#262930] text-sm font-mono text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue transition">
+                        </div>
+
+                        <!-- Read-Only Auto-Extracted Device Fingerprint Info -->
+                        <div class="fold-subcard p-3.5 flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-2.5 text-[#9ca3af]">
+                                <i class="fa-solid fa-microchip text-fold-blueText"></i>
+                                <span>Auto-Detected Device</span>
+                            </div>
+                            <div class="text-right">
+                                <div id="onboardingDetectedDeviceName" class="font-mono font-semibold text-white">Detecting...</div>
+                                <div id="onboardingDetectedDeviceId" class="text-[10px] font-mono text-[#686b73]"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-6">
+                    <button type="button" onclick="completeOnboardingSetup()" class="w-full py-4 rounded-2xl bg-fold-blue hover:opacity-95 text-black font-extrabold text-[15px] shadow-lg active:scale-[0.99] transition">
+                        Continue to FoldSplit
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             TAB 1: HOME VIEW (Matches fold 1.jpeg & fold 2.jpeg)
+        ==================================================================== -->
+        <div id="tabView_HOME" class="px-4 pt-4 space-y-4 animate-fade">
+
+            <!-- Top Pill Navigation Row (Event Name Dropdown, + New Event, Share Link) -->
+            <div class="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <!-- Active Event Pill -->
+                    <button onclick="switchBottomTab('EVENTS')" class="px-4 py-1.5 rounded-full bg-[#24262b] border border-[#363940] text-white font-bold text-[15px] tracking-tight flex items-center gap-1.5 active:scale-95 transition">
+                        <span id="homeTopEventName" class="truncate max-w-[155px]">No Event Yet</span>
+                        <i class="fa-solid fa-caret-down text-xs text-fold-muted"></i>
+                    </button>
+                    <!-- People / Friends in Event Pill -->
+                    <button onclick="openShareAndPeopleModal()" class="px-3 py-1.5 rounded-full text-fold-muted hover:text-white font-semibold text-[15px] transition flex items-center gap-1">
+                        <span>People</span>
+                        <span id="homeTopPeopleCount" class="text-xs text-fold-blueText font-bold">(1)</span>
+                    </button>
+                    <!-- Quick + Event Pill -->
+                    <button onclick="openCreateEventModal()" class="px-2.5 py-1.5 rounded-full text-fold-muted hover:text-white font-semibold text-[15px] transition">
+                        + Event
+                    </button>
+                </div>
+
+                <!-- Right Share Link Pill -->
+                <button onclick="copyEventShareLink()" class="px-3 py-1.5 rounded-full bg-fold-navyPill border border-[#25385c] text-fold-blueText text-xs font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition">
+                    <i class="fa-solid fa-share-nodes text-[11px]"></i>
+                    <span>Share</span>
+                </button>
+            </div>
+
+            <!-- Profile Header Row (Fold 1 style: User PFP + Name + Blue Subtitle + Right Icons) -->
+            <div class="flex items-center justify-between pt-1">
+                <!-- Left: Tappable Profile Area -> Opens Full-Screen Personal Profile -->
+                <div onclick="openProfileOverlay()" class="flex items-center gap-3.5 cursor-pointer group">
+                    <div class="w-12 h-12 rounded-full p-[2px] bg-[#2a2d35] group-hover:bg-fold-blue transition shrink-0 overflow-hidden">
+                        <img id="homeProfileAvatarImg" src="" alt="PFP" class="w-full h-full rounded-full object-cover">
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span id="homeProfileName" class="text-[17px] font-semibold text-[#e5e7eb] group-hover:text-white transition">User</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-fold-blueText text-[13.5px] font-medium mt-0.5">
+                            <span id="homeProfileSubtitle">0 pending settlements</span>
+                            <!-- Fold signature curly arrow SVG -->
+                            <svg class="w-6 h-3.5 stroke-current" viewBox="0 0 28 14" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 9 C 8 9, 12 2, 9 2 C 6 2, 7 9, 15 9 L 25 9 M 21 5 L 25 9 L 21 13"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Icons: Share/Invite Friends & Add Expense Button -->
+                <div class="flex items-center gap-2.5">
+                    <button onclick="openShareAndPeopleModal()" class="w-9 h-9 rounded-xl bg-[#14161a] border border-[#282b33] hover:border-white/40 flex items-center justify-center text-[#d1d5db] active:scale-95 transition" title="Manage Participants & Share Link">
+                        <i class="fa-solid fa-user-plus text-xs"></i>
+                    </button>
+                    <button onclick="openAddExpenseModal()" class="w-9 h-9 rounded-xl bg-[#14161a] border border-[#282b33] hover:border-fold-blue flex items-center justify-center text-white active:scale-95 transition" title="Add Expense">
+                        <i class="fa-solid fa-plus text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Shareable Link & Add People Pill Bar (Matches Fold 'Get Plus at a discount / Upgrade' bar) -->
+            <div class="fold-card px-4 py-3.5 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="w-2 h-2 rounded-full bg-fold-green shrink-0"></span>
+                    <span id="homeShareLinkText" class="text-[13.5px] text-[#9ca3af] truncate font-medium">Create an event to generate a share link</span>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                    <button onclick="copyEventShareLink()" class="text-[13.5px] font-semibold text-fold-blueText hover:underline">
+                        Copy Link
+                    </button>
+                    <span class="text-[#2c2f36]">|</span>
+                    <button onclick="openShareAndPeopleModal()" class="text-[13.5px] font-semibold text-fold-blueText hover:underline">
+                        + People
+                    </button>
+                </div>
+            </div>
+
+            <!-- TOTAL SPEND CARD (Matches Fold 'Total Balance ₹900.72' with green sparkline) -->
+            <div class="fold-card p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-5 h-5 rounded-full bg-[#8b8e96] text-black flex items-center justify-center text-[11px] font-extrabold">
+                            ₹
+                        </div>
+                        <span class="text-[15px] font-medium text-[#9ca3af]">Total Spend Across Group</span>
+                    </div>
+                    <button onclick="openShareAndPeopleModal()" class="text-fold-blueText hover:opacity-80 px-1">
+                        <i class="fa-solid fa-ellipsis text-base"></i>
+                    </button>
+                </div>
+
+                <!-- Amount + Green Sparkline Row -->
+                <div class="flex items-center justify-between pt-1 pb-3 border-b border-[#22242a]">
+                    <div class="tabular-nums flex items-baseline">
+                        <span class="text-lg font-bold text-[#9ca3af] mr-1 -translate-y-2">₹</span>
+                        <span id="homeTotalSpendWhole" class="text-[34px] font-extrabold tracking-tight text-white leading-none">0</span>
+                        <span id="homeTotalSpendDec" class="text-[20px] font-bold text-[#6b7280] ml-0.5">.00</span>
+                    </div>
+
+                    <!-- Fold Green Sparkline SVG -->
+                    <div class="w-28 h-11">
+                        <svg viewBox="0 0 120 42" fill="none" class="w-full h-full overflow-visible">
+                            <defs>
+                                <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="#22c55e" stop-opacity="0.35"/>
+                                    <stop offset="100%" stop-color="#22c55e" stop-opacity="0.0"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M2 32 L14 31 L20 35 L32 35 L46 35 L50 8 L58 14 L68 25 L82 25 L92 29 L96 15 L100 36 L105 28 L118 28 L118 40 L2 40 Z" fill="url(#sparkFill)"/>
+                            <path d="M2 32 L14 31 L20 35 L32 35 L46 35 L50 8 L58 14 L68 25 L82 25 L92 29 L96 15 L100 36 L105 28 L118 28" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Bottom Pills inside Total Spend Card -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                    <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#090a0c] border border-[#1d1f24]">
+                        <span class="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-600 to-red-500 flex items-center justify-center text-[9px] font-bold text-white">∞</span>
+                        <span id="homeUpiCashSplitText" class="text-xs font-semibold text-[#e5e7eb] tabular-nums">UPI ₹0 • Cash ₹0</span>
+                    </div>
+
+                    <button onclick="openAddExpenseModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-fold-navyPill border border-fold-blue/30 text-xs font-bold text-fold-blueText hover:opacity-90 transition">
+                        <i class="fa-solid fa-plus text-[10px]"></i>
+                        <span>Add Expense</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SPENDING SUMMARY CARD (Matches fold 2.jpeg: Category Fill Bars + Participant PFPs + Detailed Splits) -->
+            <div class="fold-card p-5 space-y-4">
+                <!-- Card Header -->
+                <div class="flex items-center justify-between border-b border-[#202227] pb-3.5">
+                    <div class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-chart-pie text-[#9ca3af] text-sm"></i>
+                        <span class="text-[15px] font-medium text-[#9ca3af]">Spending Summary</span>
+                    </div>
+                    <button onclick="openAddExpenseModal()" class="px-3 py-1 rounded-full bg-fold-navyPill text-fold-blueText text-xs font-bold hover:opacity-90 transition">
+                        + Add Spend
+                    </button>
+                </div>
+
+                <!-- Event Date & Payment Mode Filter Row -->
+                <div class="flex items-center justify-between">
+                    <div id="homeSpendingDateLabel" class="text-xs font-semibold tracking-widest uppercase text-[#787b84]">
+                        CURRENT EVENT
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="setHomeFilter('ALL')" id="homeFilter_ALL" class="w-8 h-8 rounded-full border border-fold-blue bg-[#161922] text-[10px] font-bold text-white flex items-center justify-center transition" title="All Spends">
+                            ALL
+                        </button>
+                        <button onclick="setHomeFilter('UPI')" id="homeFilter_UPI" class="w-8 h-8 rounded-full border border-[#262930] bg-[#0c0d10] text-[10px] font-bold text-[#9ca3af] flex items-center justify-center transition" title="UPI Only">
+                            UPI
+                        </button>
+                        <button onclick="setHomeFilter('Cash')" id="homeFilter_Cash" class="w-8 h-8 rounded-full border border-[#262930] bg-[#0c0d10] text-[10px] font-bold text-[#9ca3af] flex items-center justify-center transition" title="Cash Only">
+                            ₹
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Participant Avatar Circles Row (Matches the circular icons row in fold 2.jpeg) -->
+                <div id="homeParticipantAvatarsRow" class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5">
+                    <!-- Dynamically populated with participant PFPs -->
+                </div>
+
+                <!-- Category Breakdown Proportional Bars (Exact Fold 2 style: Shopping -₹828, Food & Drinks -₹209) -->
+                <div id="homeCategoryBarsList" class="space-y-2.5 pt-1">
+                    <!-- Populated by JS -->
+                </div>
+
+                <!-- Detailed Expense Items List (Shows Participants, Payer, Creator + Auto-Extracted Device) -->
+                <div id="homeSpendingsList" class="space-y-3 pt-2 border-t border-[#1e2026]">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- SETTLEMENTS & WHO PAYS WHOM CARD (Fold 'Bank Accounts' style card at bottom of Home) -->
+            <div class="fold-card p-5 space-y-4">
+                <div class="flex items-center justify-between border-b border-[#202227] pb-3.5">
+                    <div class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-building-columns text-[#9ca3af] text-sm"></i>
+                        <span class="text-[15px] font-medium text-[#9ca3af]">Settlements & UPI Pay</span>
+                    </div>
+                    <button onclick="openProfileOverlay()" class="text-xs font-semibold text-fold-blueText hover:underline">
+                        My UPI ▸
+                    </button>
+                </div>
+
+                <!-- Personal Net Position Subcard (Matches HDFC BANK inner card in fold 2.jpeg) -->
+                <div class="fold-subcard p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-[#e11d48]/15 border border-[#e11d48]/40 flex items-center justify-center">
+                                <div class="w-4 h-4 bg-fold-blue rounded-sm border-2 border-[#ef4444]"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span id="settlementActiveProfileTitle" class="text-sm font-bold tracking-wide uppercase text-white">MY LEDGER</span>
+                                    <span id="settlementActiveDeviceTag" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/60 text-fold-muted">Device</span>
+                                </div>
+                                <div id="settlementActiveUpiId" class="text-xs text-[#787b84] font-mono">No UPI ID set</div>
+                            </div>
+                        </div>
+                        <button onclick="openProfileOverlay()" class="px-2.5 py-1 rounded-lg bg-[#23262e] text-[11px] font-semibold text-[#d1d5db] hover:text-white">
+                            Edit Profile
+                        </button>
+                    </div>
+
+                    <div class="pt-2 border-t border-[#262930] grid grid-cols-3 gap-2 text-center">
+                        <div class="p-2 rounded-xl bg-black/40">
+                            <div class="text-[10px] text-[#8b8e96] uppercase">You Paid</div>
+                            <div id="settleMyPaid" class="text-sm font-bold text-white tabular-nums mt-0.5">₹0</div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-black/40">
+                            <div class="text-[10px] text-[#8b8e96] uppercase">Your Share</div>
+                            <div id="settleMyShare" class="text-sm font-bold text-white tabular-nums mt-0.5">₹0</div>
+                        </div>
+                        <div class="p-2 rounded-xl bg-black/40">
+                            <div class="text-[10px] text-[#8b8e96] uppercase">Net Balance</div>
+                            <div id="settleMyNet" class="text-sm font-bold text-fold-green tabular-nums mt-0.5">₹0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. What You Need to Pay & Whom to Pay -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-semibold text-[#9ca3af] uppercase tracking-wider">What You Need To Pay</span>
+                        <span id="settleToPayTotalBadge" class="font-bold text-fold-red tabular-nums">₹0</span>
+                    </div>
+                    <div id="homeMyPayList" class="space-y-2"></div>
+                </div>
+
+                <!-- 2. How Much You Will Get Back & From Whom -->
+                <div class="space-y-2 pt-2 border-t border-[#1e2025]">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-semibold text-[#9ca3af] uppercase tracking-wider">What You Get Back</span>
+                        <span id="settleToReceiveTotalBadge" class="font-bold text-fold-green tabular-nums">₹0</span>
+                    </div>
+                    <div id="homeMyReceiveList" class="space-y-2"></div>
+                </div>
+
+                <!-- 3. What Others Are Paying to Whom -->
+                <div class="space-y-2 pt-2 border-t border-[#1e2025]">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-semibold text-[#9ca3af] uppercase tracking-wider">What Others Are Paying</span>
+                        <span class="text-[11px] text-fold-muted">Group Transparency</span>
+                    </div>
+                    <div id="homeOthersSettlementList" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             TAB 2: TRANSACTIONS VIEW (Matches fold 3.jpeg — Shows Creator PFP on Every Transaction)
+        ==================================================================== -->
+        <div id="tabView_TRANSACTIONS" class="hidden px-4 pt-5 space-y-4 animate-fade">
+            <!-- Top Header -->
+            <div class="flex items-center justify-between">
+                <h1 class="text-[28px] font-bold tracking-tight text-white">Transactions</h1>
+                <div class="flex items-center gap-2.5">
+                    <button onclick="openAddExpenseModal()" class="w-9 h-9 rounded-xl bg-[#141519] border border-[#26282e] flex items-center justify-center text-white" title="Add Expense">
+                        <i class="fa-solid fa-plus text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search Bar + Filter Circle (Exact Fold 3 layout) -->
+            <div class="flex items-center gap-2.5">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-[#787b84] text-sm"></i>
+                    <input type="text" id="txSearchInput" oninput="renderTransactionsTab()" placeholder="Search transactions, category, friend..." class="w-full pl-10 pr-4 py-2.5 rounded-full bg-[#191b1f] border border-[#26282e] text-sm text-white placeholder-[#787b84] focus:outline-none focus:border-fold-blue">
+                </div>
+                <button onclick="cycleTxFilter()" class="w-10 h-10 rounded-full bg-[#191b1f] border border-[#26282e] flex items-center justify-center text-white shrink-0" title="Cycle Filter">
+                    <i class="fa-solid fa-sliders text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Underline Sub-tabs: All | Unclear | Cleared -->
+            <div class="flex items-center gap-6 border-b border-[#1d1f24] text-[14px] font-semibold overflow-x-auto no-scrollbar">
+                <button onclick="setTxSubTab('ALL')" id="txTab_ALL" class="pb-2.5 text-white border-b-2 border-white whitespace-nowrap transition">All</button>
+                <button onclick="setTxSubTab('UNCLEAR')" id="txTab_UNCLEAR" class="pb-2.5 text-[#787b84] hover:text-white whitespace-nowrap transition">Unclear</button>
+                <button onclick="setTxSubTab('CLEARED')" id="txTab_CLEARED" class="pb-2.5 text-[#787b84] hover:text-white whitespace-nowrap transition">Cleared</button>
+            </div>
+
+            <!-- Summary Line -->
+            <div class="flex items-center justify-between pt-1 pb-1 border-b border-[#1d1f24] text-[13px] font-semibold text-[#d1d5db]">
+                <span>All Events History</span>
+                <span id="txTotalCountLabel" class="tabular-nums">0 transactions</span>
+            </div>
+
+            <!-- All Transactions Feed Container -->
+            <div id="txListContainer" class="space-y-3 pb-4">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             TAB 3: EVENTS VIEW (Matches fold 4.jpeg layout adapted to Events)
+        ==================================================================== -->
+        <div id="tabView_EVENTS" class="hidden px-4 pt-5 space-y-4 animate-fade">
+            <!-- Top Header: 'Events' on left, Cumulative Value on right -->
+            <div class="flex items-start justify-between">
+                <div>
+                    <h1 class="text-[28px] font-bold tracking-tight text-white">Events</h1>
+                    <p class="text-xs text-[#8b8e96] mt-0.5">Every current & past event link</p>
+                </div>
+                <div class="text-right">
+                    <div id="eventsGrandTotalValue" class="text-[22px] font-bold text-white tabular-nums">₹0</div>
+                    <div class="text-[13px] text-[#787b84]">Total across events</div>
+                </div>
+            </div>
+
+            <!-- Stack of Event Cards (Exact Fold 4 row card aesthetic) -->
+            <div id="eventsPortfolioList" class="space-y-3 pt-2">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Create New Event Row Card -->
+            <div onclick="openCreateEventModal()" class="fold-card px-4 py-4 flex items-center justify-between cursor-pointer hover:border-fold-blue/50 transition">
+                <div class="flex items-center gap-3.5">
+                    <div class="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center">
+                        <i class="fa-solid fa-calendar-plus text-sm"></i>
+                    </div>
+                    <div>
+                        <div class="text-[15px] font-semibold text-[#e5e7eb]">Create New Event Link</div>
+                        <div class="text-xs text-[#787b84]">Generate a shareable link for a new outing</div>
+                    </div>
+                </div>
+                <span class="px-3.5 py-1.5 rounded-xl bg-fold-navyPill text-fold-blueText text-[11px] font-bold tracking-wider uppercase">
+                    TAP TO ADD
+                </span>
+            </div>
+
+            <!-- Bottom Status Pill -->
+            <div class="pt-4">
+                <div class="fold-card px-4 py-3.5 flex items-center gap-3 text-xs font-bold tracking-wider uppercase text-[#d1d5db]">
+                    <span class="w-1.5 h-1.5 rounded-full bg-fold-green"></span>
+                    <i class="fa-solid fa-ticket text-sm text-white"></i>
+                    <span id="eventsBottomSyncStatus">READY FOR GROUP SYNC</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             TAB 4: CALENDAR VIEW (Matches fold 5.jpeg 'Bills' Calendar adapted to Events)
+        ==================================================================== -->
+        <div id="tabView_CALENDAR" class="hidden px-4 pt-5 space-y-4 animate-fade">
+            <!-- Header -->
+            <div class="flex items-center justify-between">
+                <h1 class="text-[28px] font-bold tracking-tight text-white">Calendar</h1>
+                <div class="flex items-center gap-3">
+                    <button onclick="openCreateEventModal()" class="w-9 h-9 rounded-xl bg-[#141519] border border-[#26282e] flex items-center justify-center text-white" title="New Event">
+                        <i class="fa-solid fa-calendar-plus text-sm"></i>
+                    </button>
+                    <button onclick="openAddExpenseModal()" class="w-9 h-9 rounded-xl bg-[#141519] border border-[#26282e] flex items-center justify-center text-white" title="Add Expense">
+                        <i class="fa-solid fa-receipt text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sub-headers: Events View | All Spends -->
+            <div class="flex items-center gap-5 text-[17px] font-bold">
+                <span class="text-white">Events Timeline</span>
+                <span onclick="switchBottomTab('TRANSACTIONS')" class="text-[#686b73] cursor-pointer hover:text-white transition">All Spends</span>
+            </div>
+
+            <!-- Month Selector & Cleared Counter -->
+            <div class="flex items-center justify-between pt-1">
+                <div class="flex items-center gap-2 text-[17px] font-semibold text-white">
+                    <button onclick="changeCalendarMonth(-1)" class="w-7 h-7 rounded-lg bg-[#141519] text-xs text-[#9ca3af] hover:text-white flex items-center justify-center">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <span id="calMonthTitle" class="min-w-[120px] text-center">November ‘26</span>
+                    <button onclick="changeCalendarMonth(1)" class="w-7 h-7 rounded-lg bg-[#141519] text-xs text-[#9ca3af] hover:text-white flex items-center justify-center">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2 text-[14px] font-semibold text-[#d1d5db]">
+                    <i class="fa-solid fa-circle-half-stroke text-white"></i>
+                    <span id="calClearedRatioText">Cleared 0 / 0</span>
+                </div>
+            </div>
+
+            <!-- 7-Column Calendar Grid (Matches fold 5.jpeg) -->
+            <div class="pt-2">
+                <div class="grid grid-cols-7 gap-y-4 text-center text-[11px] font-semibold text-[#686b73] pb-2">
+                    <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+                </div>
+                <div id="calendarGridContainer" class="grid grid-cols-7 gap-y-3 text-center items-center">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- 3 Summary Metrics Below Calendar -->
+            <div class="flex items-center justify-center gap-8 py-2 text-xs">
+                <div>
+                    <div class="text-[#787b84] text-[11px]">Unclear</div>
+                    <div class="flex items-center gap-1.5 font-bold text-white mt-0.5 tabular-nums">
+                        <span class="w-2 h-2 rounded-full bg-white"></span>
+                        <span id="calMetricUnclear">₹0</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-[#787b84] text-[11px]">Total Events</div>
+                    <div class="flex items-center gap-1.5 font-bold text-white mt-0.5 tabular-nums">
+                        <span class="w-2 h-2 rounded-full bg-fold-blue"></span>
+                        <span id="calMetricEventsCount">0</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-[#787b84] text-[11px]">Cleared</div>
+                    <div class="flex items-center gap-1.5 font-bold text-white mt-0.5 tabular-nums">
+                        <span class="w-2 h-2 rounded-full bg-fold-green"></span>
+                        <span id="calMetricCleared">₹0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Sheet Drawer Card (All Events / Unclear / Cleared segmented bar + Event cards with Calendar Badge) -->
+            <div class="fold-card p-3.5 space-y-3 bg-[#101114] border-t-2 border-[#23252a]">
+                <div class="w-10 h-1 rounded-full bg-[#2c2f36] mx-auto"></div>
+
+                <!-- Segmented Control -->
+                <div class="grid grid-cols-3 p-1 rounded-2xl bg-[#1b1d22] text-[13px] font-semibold">
+                    <button onclick="setCalFilter('ALL')" id="calSeg_ALL" class="py-2 rounded-xl bg-[#0e1014] text-fold-blueText shadow">All Events</button>
+                    <button onclick="setCalFilter('UNCLEAR')" id="calSeg_UNCLEAR" class="py-2 rounded-xl text-[#8b8e96] hover:text-white">Unclear</button>
+                    <button onclick="setCalFilter('CLEARED')" id="calSeg_CLEARED" class="py-2 rounded-xl text-[#8b8e96] hover:text-white">Cleared</button>
+                </div>
+
+                <!-- Calendar Event Cards List -->
+                <div id="calendarEventsDrawerList" class="space-y-2.5">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             FLOATING 4-ICON BOTTOM NAVIGATION DOCK (Updated Event Icon on 3rd Tab)
+        ==================================================================== -->
+        <nav class="fixed bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-[390px] z-40 fold-dock p-1.5 grid grid-cols-4 items-center">
+            <!-- 1. Home Icon (Fold Moon/Sphere icon) -->
+            <button onclick="switchBottomTab('HOME')" id="navBtn_HOME" class="py-2.5 flex items-center justify-center fold-dock-active text-white transition" title="Home">
+                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                    <path d="M12 3C15.5 5.5 16.5 14 12 21C17 21 21 17 21 12C21 7 17 3 12 3Z" fill="currentColor"/>
+                </svg>
+            </button>
+
+            <!-- 2. Transactions Icon (Rupee Bill Pouch icon) -->
+            <button onclick="switchBottomTab('TRANSACTIONS')" id="navBtn_TRANSACTIONS" class="py-2.5 flex items-center justify-center text-[#8b8e96] hover:text-white transition" title="Transactions">
+                <div class="w-6 h-6 rounded-md border-2 border-current flex items-center justify-center text-xs font-extrabold">
+                    ₹
+                </div>
+            </button>
+
+            <!-- 3. Events Icon (Custom Event Ticket / Star Pass SVG — Replaces old portfolio graph icon) -->
+            <button onclick="switchBottomTab('EVENTS')" id="navBtn_EVENTS" class="py-2.5 flex items-center justify-center text-[#8b8e96] hover:text-white transition" title="Events">
+                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/>
+                    <path d="m12 8.5 1.15 2.3 2.55.37-1.85 1.8.44 2.53L12 14.3l-2.29 1.2.44-2.53-1.85-1.8 2.55-.37Z"/>
+                </svg>
+            </button>
+
+            <!-- 4. Calendar Icon -->
+            <button onclick="switchBottomTab('CALENDAR')" id="navBtn_CALENDAR" class="py-2.5 flex items-center justify-center text-[#8b8e96] hover:text-white transition" title="Calendar">
+                <i class="fa-regular fa-calendar-days text-lg"></i>
+            </button>
+        </nav>
+
+        <!-- ===================================================================
+             FULL-SCREEN PERSONAL PROFILE OVERLAY (Matches fold 6.jpeg + Refinements #1, #2, #4)
+             - Removed settings gear icon on top right
+             - Removed Active Profile switcher & Squad Registry
+             - Read-only code-extracted Device Name & Device ID
+             - Tap avatar to change PFP anytime
+        ==================================================================== -->
+        <div id="profileOverlay" class="fixed inset-0 z-50 hidden bg-black overflow-y-auto flex justify-center animate-fade">
+            <div class="w-full max-w-[430px] min-h-screen px-4 pt-5 pb-12 space-y-5">
+
+                <!-- Top Bar: Close (X) on Left, 'Profile' Centered, Spacer on Right (No Settings Gear) -->
+                <div class="flex items-center justify-between">
+                    <button onclick="closeProfileOverlay()" class="w-11 h-11 rounded-full bg-[#15171b] border border-[#262930] flex items-center justify-center text-white active:scale-95 transition">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                    <h2 class="text-[18px] font-bold text-white">Profile</h2>
+                    <div class="w-11 h-11"></div>
+                </div>
+
+                <!-- Center Avatar (Tap to Change PFP) + Auto-Extracted Device Badge + UPI Handle Pill + Name -->
+                <div class="flex flex-col items-center text-center pt-2">
+                    <div class="relative">
+                        <div onclick="triggerPfpUpload()" class="w-28 h-28 rounded-full p-1 bg-[#262930] cursor-pointer group relative overflow-hidden">
+                            <img id="profileOverlayAvatarImg" src="" alt="Profile Avatar" class="w-full h-full rounded-full object-cover">
+                            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center rounded-full transition">
+                                <i class="fa-solid fa-camera text-white text-lg"></i>
+                                <span class="text-[10px] font-bold text-white mt-0.5">Change PFP</span>
+                            </div>
+                        </div>
+                        <!-- Camera Edit Badge -->
+                        <button onclick="triggerPfpUpload()" class="absolute top-0 right-0 w-8 h-8 rounded-full bg-[#24272d] border border-[#3a3e47] text-white flex items-center justify-center shadow-lg" title="Change Profile Picture">
+                            <i class="fa-solid fa-camera text-xs"></i>
+                        </button>
+                        <!-- Overlapping Auto-Detected Device Badge (Matches FOLD LITE pill in fold 6.jpeg) -->
+                        <div class="-mt-3.5 relative z-10 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#24272d] border border-[#3a3e47] text-[11px] font-extrabold tracking-wider uppercase text-white shadow-lg">
+                            <i class="fa-solid fa-circle-half-stroke text-xs"></i>
+                            <span id="profileOverlayDeviceBadge">DEVICE</span>
+                        </div>
+                    </div>
+
+                    <!-- UPI Handle Pill (Matches @notarghyaatall in fold 6.jpeg) -->
+                    <button onclick="focusUpiEditInput()" class="mt-3 px-4 py-1.5 rounded-full bg-[#17191e] border border-[#262930] hover:border-fold-blue text-[16px] font-semibold text-white flex items-center gap-2 transition">
+                        <span id="profileOverlayUpiPill">@add_upi_id</span>
+                        <i class="fa-solid fa-caret-right text-xs text-[#8b8e96]"></i>
+                    </button>
+
+                    <div id="profileOverlayNameSub" class="mt-2 text-xs font-semibold tracking-widest uppercase text-[#787b84]">
+                        USER
+                    </div>
+                </div>
+
+                <!-- Periwinkle Blue Card (Matches Fold 6 'Upgrade to Plus' card — Direct UPI Payment Info) -->
+                <div class="fold-card p-3 space-y-2.5">
+                    <div onclick="focusUpiEditInput()" class="fold-blue-card px-4 py-3.5 flex items-center justify-between cursor-pointer">
+                        <div class="flex items-center gap-2.5 font-bold text-[15px]">
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>Instant UPI Settlement Redirect</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-sm"></i>
+                    </div>
+                    <p class="px-1 text-[13px] text-[#9ca3af] leading-relaxed">
+                        Add your UPI ID below so friends in your event link are directly redirected to their UPI payment window when settling back with you.
+                    </p>
+                </div>
+
+                <!-- Personal Details & Read-Only Hardware Device Card (Fold 6 list rows style) -->
+                <div class="fold-card divide-y divide-[#22242a] overflow-hidden">
+                    <!-- Row 1: Change Profile Photo -->
+                    <div onclick="triggerPfpUpload()" class="p-4 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition">
+                        <div class="flex items-center gap-3 text-[15px] font-medium text-white">
+                            <i class="fa-regular fa-image text-[#8b8e96] w-5 text-center"></i>
+                            <span>Change Profile Picture</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-0.5 rounded bg-black text-[10px] font-bold uppercase tracking-wider text-fold-blueText">UPLOAD</span>
+                            <i class="fa-solid fa-chevron-right text-xs text-[#686b73]"></i>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Your Display Name -->
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 text-[15px] font-medium text-white">
+                                <i class="fa-regular fa-user text-[#8b8e96] w-5 text-center"></i>
+                                <span>Your Name</span>
+                            </div>
+                        </div>
+                        <input type="text" id="profileNameInput" placeholder="Your Name" class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#2a2d35] text-sm text-white focus:outline-none focus:border-fold-blue">
+                    </div>
+
+                    <!-- Row 3: Your UPI ID -->
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 text-[15px] font-medium text-white">
+                                <i class="fa-solid fa-at text-[#8b8e96] w-5 text-center"></i>
+                                <span>Your UPI ID</span>
+                            </div>
+                            <span class="px-2 py-0.5 rounded bg-black text-[10px] font-bold uppercase text-fold-green">DIRECT PAY</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" id="profileUpiInput" placeholder="yourname@okaxis" class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#2a2d35] text-sm text-white font-mono focus:outline-none focus:border-fold-blue">
+                            <button onclick="savePersonalProfileChanges()" class="px-4 py-2.5 rounded-xl bg-fold-blue text-black font-bold text-xs shrink-0 active:scale-95 transition">
+                                Save
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Row 4: Auto-Extracted Device & Hardware ID (Strictly Read-Only, No User Input) -->
+                    <div class="p-4 flex items-center justify-between">
+                        <div class="flex items-center gap-3 text-[15px] font-medium text-white">
+                            <i class="fa-solid fa-mobile-screen text-[#8b8e96] w-5 text-center"></i>
+                            <div>
+                                <div>Extracted Device</div>
+                                <div id="profileReadOnlyDeviceId" class="text-[11px] font-mono text-[#686b73] mt-0.5">ID: DEV-...</div>
+                            </div>
+                        </div>
+                        <span id="profileReadOnlyDeviceName" class="px-2.5 py-1 rounded-md bg-black border border-[#262930] text-xs font-mono text-[#d1d5db]">
+                            Detecting...
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Two Side-by-Side Total Cards at Bottom (Exact Fold 6 'Bank Accounts / Credit Cards' layout) -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="fold-card p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <i class="fa-solid fa-building-columns text-lg text-white"></i>
+                            <span id="profileAllTimeSpent" class="text-[22px] font-extrabold text-white tabular-nums">₹0</span>
+                        </div>
+                        <div class="text-[13px] font-medium text-[#8b8e96]">Total Spent</div>
+                    </div>
+
+                    <div class="fold-card p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <i class="fa-regular fa-credit-card text-lg text-fold-green"></i>
+                            <span id="profileAllTimeGotBack" class="text-[22px] font-extrabold text-fold-green tabular-nums">₹0</span>
+                        </div>
+                        <div class="text-[13px] font-medium text-[#8b8e96]">Total Got Back</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             MODAL 1: ADD EXPENSE (With Categories + Custom Category, No Stamp UI Box)
+        ==================================================================== -->
+        <div id="addExpenseModal" class="fixed inset-0 z-50 hidden bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade">
+            <div class="fold-card w-full max-w-[430px] rounded-t-[28px] sm:rounded-[24px] p-5 space-y-4 max-h-[92vh] overflow-y-auto border-t border-[#2e3138]">
+                <div class="flex items-center justify-between pb-2 border-b border-[#22242a]">
+                    <div>
+                        <h3 class="text-lg font-bold text-white">Add Expense</h3>
+                        <p class="text-xs text-[#8b8e96]">Select category, who paid & who participated</p>
+                    </div>
+                    <button onclick="closeAddExpenseModal()" class="w-8 h-8 rounded-full bg-[#1d1f24] text-[#9ca3af] hover:text-white flex items-center justify-center">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Category Selector + Custom Category Creator -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-[#9ca3af]">Category</label>
+                        <button type="button" onclick="toggleCustomCategoryBox()" class="text-[11px] font-bold text-fold-blueText hover:underline">
+                            + Custom Category
+                        </button>
+                    </div>
+
+                    <div id="expCategoryChipsContainer" class="flex flex-wrap gap-1.5">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <!-- Inline Custom Category Creator -->
+                    <div id="customCategoryCreatorBox" class="hidden pt-1 flex gap-2">
+                        <input type="text" id="newCustomCategoryInput" placeholder="New category name (e.g. Snacks, Fuel)" class="w-full px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs text-white focus:outline-none focus:border-fold-blue">
+                        <button type="button" onclick="saveNewCustomCategory()" class="px-3.5 py-2 rounded-xl bg-fold-blue text-black font-bold text-xs shrink-0">
+                            Add
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expense Topic / Description -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-[#9ca3af]">Expense Description</label>
+                    <input type="text" id="expTitleInput" placeholder="e.g. Dinner at Alpino, Cab to Station, HOH..." class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#2a2d35] text-sm text-white focus:outline-none focus:border-fold-blue">
+                </div>
+
+                <!-- Amount & Payment Mode (UPI / Cash) -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-semibold text-[#9ca3af] block mb-1">Amount (₹)</label>
+                        <input type="number" id="expAmountInput" oninput="updateSplitMathPreview()" placeholder="0" class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#2a2d35] text-base font-bold text-white tabular-nums focus:outline-none focus:border-fold-blue">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-[#9ca3af] block mb-1">Paid Via</label>
+                        <div class="grid grid-cols-2 p-1 rounded-xl bg-black border border-[#2a2d35]">
+                            <button type="button" id="expModeUPI" onclick="setModalPayMode('UPI')" class="py-1.5 rounded-lg text-xs font-bold bg-fold-blue text-black">UPI</button>
+                            <button type="button" id="expModeCash" onclick="setModalPayMode('Cash')" class="py-1.5 rounded-lg text-xs font-bold text-[#8b8e96]">Cash</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Paid By Selector -->
+                <div>
+                    <label class="text-xs font-semibold text-[#9ca3af] block mb-1">Who Paid for This?</label>
+                    <select id="expPaidBySelect" class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#2a2d35] text-xs font-semibold text-white focus:outline-none focus:border-fold-blue"></select>
+                </div>
+
+                <!-- Participants Selection for this Topic -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-[#9ca3af]">Participants in This Topic</label>
+                        <div class="flex gap-2 text-[11px]">
+                            <button type="button" onclick="toggleAllModalParticipants(true)" class="text-fold-blueText font-semibold">Select All</button>
+                            <span class="text-[#3a3d45]">•</span>
+                            <button type="button" onclick="toggleAllModalParticipants(false)" class="text-[#8b8e96]">Clear</button>
+                        </div>
+                    </div>
+                    <div id="expParticipantsPills" class="flex flex-wrap gap-1.5"></div>
+                    <div id="expPerPersonSplitText" class="text-xs text-fold-blueText font-medium tabular-nums"></div>
+                </div>
+
+                <button type="button" onclick="submitNewExpense()" class="w-full py-3.5 rounded-2xl bg-fold-blue hover:opacity-95 text-black font-extrabold text-sm shadow-lg transition">
+                    Save Expense
+                </button>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             MODAL 2: DIRECT UPI APP REDIRECT WINDOW (GPay / PhonePe / Paytm)
+        ==================================================================== -->
+        <div id="upiRedirectModal" class="fixed inset-0 z-50 hidden bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade">
+            <div class="fold-card w-full max-w-[410px] rounded-t-[28px] sm:rounded-[24px] p-5 space-y-4 text-center border-t border-[#2e3138]">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-fold-blueText flex items-center gap-1.5">
+                        <i class="fa-solid fa-bolt"></i> Direct UPI Payment Window
+                    </span>
+                    <button onclick="closeUpiRedirectModal()" class="w-8 h-8 rounded-full bg-[#1d1f24] text-[#9ca3af] hover:text-white flex items-center justify-center">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="py-1">
+                    <div id="upiPayTitle" class="text-sm font-medium text-[#d1d5db]">Paying Friend</div>
+                    <div id="upiPayVpaBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#181a20] border border-[#2b2e37] text-xs font-mono text-fold-blueText mt-1">
+                        friend@upi
+                    </div>
+                    <div id="upiPayAmountBig" class="text-4xl font-extrabold text-white tabular-nums mt-2">₹0</div>
+                </div>
+
+                <!-- Real Deep-Link Redirect Button (Triggers upi://pay on mobile phones) -->
+                <a id="upiDeepLinkAnchor" href="#" onclick="handleUpiDeepLinkClick(event)" class="block w-full py-3.5 rounded-2xl bg-fold-blue hover:opacity-95 text-black font-extrabold text-sm shadow-lg transition">
+                    <i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i> Open UPI App & Pay Now
+                </a>
+
+                <!-- Choose Specific UPI App Intent Buttons -->
+                <div class="grid grid-cols-3 gap-2 text-xs font-semibold">
+                    <button onclick="launchSpecificUpiApp('GPay')" class="py-2.5 rounded-xl bg-[#17191e] hover:bg-[#22252c] border border-[#262930] text-white flex flex-col items-center gap-1">
+                        <i class="fa-brands fa-google-pay text-lg text-sky-400"></i>
+                        <span>GPay</span>
+                    </button>
+                    <button onclick="launchSpecificUpiApp('PhonePe')" class="py-2.5 rounded-xl bg-[#17191e] hover:bg-[#22252c] border border-[#262930] text-white flex flex-col items-center gap-1">
+                        <i class="fa-solid fa-mobile-retro text-lg text-purple-400"></i>
+                        <span>PhonePe</span>
+                    </button>
+                    <button onclick="launchSpecificUpiApp('Paytm')" class="py-2.5 rounded-xl bg-[#17191e] hover:bg-[#22252c] border border-[#262930] text-white flex flex-col items-center gap-1">
+                        <i class="fa-solid fa-wallet text-lg text-blue-400"></i>
+                        <span>Paytm</span>
+                    </button>
+                </div>
+
+                <div class="pt-2 border-t border-[#22242a] grid grid-cols-2 gap-2">
+                    <button onclick="confirmSettlementCleared('UPI')" class="py-2.5 rounded-xl bg-fold-green/20 border border-fold-green/40 text-fold-green font-bold text-xs">
+                        ✓ Mark Paid (UPI)
+                    </button>
+                    <button onclick="confirmSettlementCleared('Cash')" class="py-2.5 rounded-xl bg-[#1b1d22] border border-[#2c2f36] text-[#d1d5db] font-bold text-xs">
+                        💵 Paid in Cash
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             MODAL 3: SHARE LINK, MANAGE PARTICIPANTS & CREATE EVENT MODAL
+        ==================================================================== -->
+        <div id="shareAndPeopleModal" class="fixed inset-0 z-50 hidden bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade">
+            <div class="fold-card w-full max-w-[420px] rounded-t-[28px] sm:rounded-[24px] p-5 space-y-4 max-h-[90vh] overflow-y-auto border-t border-[#2e3138]">
+                <div class="flex items-center justify-between pb-2 border-b border-[#22242a]">
+                    <h3 class="text-base font-bold text-white" id="shareModalHeader">Event Link & People</h3>
+                    <button onclick="closeShareAndPeopleModal()" class="w-8 h-8 rounded-full bg-[#1d1f24] text-[#9ca3af] flex items-center justify-center">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Create New Event Section -->
+                <div class="p-3.5 rounded-2xl bg-[#16181d] border border-[#282b33] space-y-2.5">
+                    <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-calendar-plus text-fold-blueText"></i>
+                        <span>Create a New Event Link</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="text" id="newEventTitleInput" placeholder="Event name (e.g. Dinner Outing)" class="col-span-2 px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs text-white focus:outline-none focus:border-fold-blue">
+                        <input type="date" id="newEventDateInput" class="px-2.5 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs text-white focus:outline-none focus:border-fold-blue">
+                    </div>
+                    <button onclick="createNewEventFromModal()" class="w-full py-2.5 rounded-xl bg-fold-blue text-black font-extrabold text-xs">
+                        Create Event & Generate Link
+                    </button>
+                </div>
+
+                <!-- Active Event Share Link Box -->
+                <div id="activeEventShareSection" class="space-y-3">
+                    <div class="p-3.5 rounded-2xl bg-[#16181d] border border-[#282b33] space-y-2">
+                        <div class="text-xs font-semibold text-fold-blueText">Share Link for Current Event</div>
+                        <p class="text-[11px] text-[#8b8e96]">Anyone opening this link sets up their profile on their phone and joins this event.</p>
+                        <div class="flex gap-2">
+                            <input type="text" id="modalShareUrlInput" readonly class="w-full px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs font-mono text-[#d1d5db]">
+                            <button onclick="copyEventShareLink()" class="px-3.5 py-2 rounded-xl bg-fold-navyPill border border-fold-blue/40 text-fold-blueText font-bold text-xs shrink-0">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Add Participant to Current Event -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-semibold text-[#9ca3af]">Add Friend to This Event</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="newPersonNameInput" placeholder="Friend's Name (e.g. Antareep)" class="w-full px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs text-white">
+                            <input type="text" id="newPersonUpiInput" placeholder="UPI ID (optional)" class="w-full px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs text-white font-mono">
+                            <button onclick="addNewPersonToEvent()" class="px-3.5 py-2 rounded-xl bg-white text-black font-bold text-xs shrink-0">
+                                + Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Current Participants List -->
+                    <div class="space-y-1.5">
+                        <div class="text-xs font-semibold text-[#9ca3af]">People in Current Event</div>
+                        <div id="modalPeopleList" class="space-y-1.5"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ===================================================================
+         BACKEND SPECIFICATION & PRODUCTION APPLICATION LOGIC
+         ===================================================================
+         AI BACKEND GENERATOR SPECIFICATION:
+         -------------------------------------------------------------------
+         1. AUTH & DEVICE HEADERS (Sent automatically on every request):
+            - `X-User-Id`: string (UUID / user_...)
+            - `X-Device-Id`: string (Deterministic hardware fingerprint DEV-...)
+            - `X-Device-Name`: string (Auto-extracted OS/Phone model, e.g. "Poco M7")
+
+         2. REST ENDPOINTS EXPECTED BY `ApiService`:
+            - `POST   /api/users/profile`
+              Body: `{ id, name, upiId, pfpUrl, deviceId, deviceName }`
+            - `GET    /api/events?userId=<id>`
+              Returns: `{ events: Event[], categories: string[] }`
+            - `POST   /api/events`
+              Body: `{ id, code, name, dateISO, createdByUserId, members: Member[] }`
+            - `POST   /api/events/:eventId/join`
+              Body: `{ userId, name, upiId, pfpUrl, deviceId, deviceName }`
+            - `POST   /api/events/:eventId/expenses`
+              Body: `{ id, eventId, title, category, amount, method, paidBy, participants: string[], createdByUserId, createdByName, createdByPfp, deviceId, deviceName, createdAt }`
+            - `PATCH  /api/events/:eventId/expenses/:expenseId`
+              Body: `{ cleared: boolean }`
+            - `DELETE /api/events/:eventId/expenses/:expenseId`
+            - `POST   /api/events/:eventId/settlements`
+              Body: `{ id, from, to, amount, method, settledByDeviceId, settledAt }`
+            - `POST   /api/categories`
+              Body: `{ name: string }`
+    ==================================================================== -->
+    <script>
+        const CONFIG = {
+            API_BASE_URL: "", // Leave empty for local persistence; set to "https://your-api.com" when backend is connected
+            STORAGE_KEY: "foldsplit_prod_v1"
+        };
+
+        const DEFAULT_CATEGORIES = [
+            "Food & Drinks",
+            "Travel",
+            "Shopping",
+            "Stay",
+            "HOH",
+            "Entertainment"
+        ];
+
+        // Default Monolith SVG Data URI (Matches Fold 1 & Fold 6 surreal green meadow avatar)
+        const DEFAULT_MONOLITH_PFP = "data:image/svg+xml;utf8," + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+                <defs>
+                    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#6b8f9c"/>
+                        <stop offset="58%" stop-color="#b4ccb9"/>
+                    </linearGradient>
+                    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#689f48"/>
+                        <stop offset="100%" stop-color="#3c6e24"/>
+                    </linearGradient>
+                </defs>
+                <rect width="120" height="70" fill="url(#sky)"/>
+                <ellipse cx="30" cy="58" rx="26" ry="10" fill="#d9e4dc" opacity="0.75"/>
+                <ellipse cx="86" cy="56" rx="30" ry="11" fill="#d9e4dc" opacity="0.75"/>
+                <ellipse cx="60" cy="61" rx="36" ry="9" fill="#e6efe8" opacity="0.85"/>
+                <rect y="67" width="120" height="53" fill="url(#grass)"/>
+                <rect x="53" y="50" width="14" height="28" fill="#090a0c"/>
+            </svg>
+        `);
+
+        // Generate deterministic geometric fallback avatar for friends added by name
+        function generateInitialsAvatar(name) {
+            const clean = (name || "U").trim();
+            const initial = clean.charAt(0).toUpperCase();
+            const colors = ["#5c85ff", "#28c76f", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4"];
+            let hash = 0;
+            for (let i = 0; i < clean.length; i++) hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+            const bg = colors[Math.abs(hash) % colors.length];
+            return "data:image/svg+xml;utf8," + encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                    <rect width="100" height="100" rx="50" fill="${bg}"/>
+                    <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="#060913" font-family="Inter, sans-serif" font-weight="800" font-size="44">${initial}</text>
+                </svg>
+            `);
+        }
+
+        // ===================================================================
+        // AUTOMATIC HARDWARE DEVICE & MODEL EXTRACTOR (No User Input)
+        // ===================================================================
+        const DeviceIdentity = {
+            deviceName: "Detecting Device...",
+            deviceId: "DEV-000000",
+
+            async init() {
+                this.deviceId = this.computeHardwareDeviceId();
+                this.deviceName = await this.extractDeviceModelName();
+                return { deviceName: this.deviceName, deviceId: this.deviceId };
+            },
+
+            computeHardwareDeviceId() {
+                try {
+                    const existing = localStorage.getItem("foldsplit_hw_device_id");
+                    if (existing) return existing;
+
+                    const canvas = document.createElement("canvas");
+                    const ctx = canvas.getContext("2d");
+                    ctx.textBaseline = "top";
+                    ctx.font = "14px 'Inter'";
+                    ctx.fillStyle = "#5c85ff";
+                    ctx.fillRect(10, 10, 80, 20);
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillText("FoldSplit-HW-FP", 12, 12);
+                    const canvasData = canvas.toDataURL();
+
+                    const raw = [
+                        navigator.userAgent,
+                        navigator.language,
+                        screen.width + "x" + screen.height,
+                        screen.colorDepth,
+                        navigator.hardwareConcurrency || 4,
+                        Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+                        canvasData.slice(-64)
+                    ].join("|");
+
+                    let hash = 2166136261;
+                    for (let i = 0; i < raw.length; i++) {
+                        hash ^= raw.charCodeAt(i);
+                        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+                    }
+                    const hex = (hash >>> 0).toString(16).toUpperCase().padStart(8, "0");
+                    const id = `DEV-${hex}`;
+                    localStorage.setItem("foldsplit_hw_device_id", id);
+                    return id;
+                } catch (e) {
+                    return "DEV-WEB98A1";
+                }
+            },
+
+            async extractDeviceModelName() {
+                try {
+                    // 1. Try Client Hints High Entropy API (Android Chrome / Edge / Opera returns exact phone model e.g. "Poco M7", "SM-S911B")
+                    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+                        const entropy = await navigator.userAgentData.getHighEntropyValues(["model", "platform", "platformVersion"]);
+                        if (entropy.model && entropy.model.trim() !== "") {
+                            return entropy.model.trim();
+                        }
+                        if (entropy.platform) {
+                            const br = this.detectBrowserShort();
+                            return `${entropy.platform} • ${br}`;
+                        }
+                    }
+                } catch (err) {
+                    // Fallback to UA string parser
+                }
+
+                const ua = navigator.userAgent || "";
+                // Extract Android build model if present: e.g., "; Poco M7 Build/" or "; Pixel 8 Pro)"
+                const androidMatch = ua.match(/Android\s[\d.]+;\s*([^;)]+?)(?:\sBuild\/|\))/i);
+                if (androidMatch && androidMatch[1]) {
+                    const model = androidMatch[1].trim();
+                    if (model && model !== "K" && model.length > 1) return model;
+                }
+
+                if (/iPhone/i.test(ua)) return `iPhone • ${this.detectBrowserShort()}`;
+                if (/iPad/i.test(ua)) return `iPad • ${this.detectBrowserShort()}`;
+                if (/Macintosh|Mac OS X/i.test(ua)) return `Mac • ${this.detectBrowserShort()}`;
+                if (/Windows/i.test(ua)) return `Windows • ${this.detectBrowserShort()}`;
+                if (/Android/i.test(ua)) return `Android • ${this.detectBrowserShort()}`;
+                if (/Linux/i.test(ua)) return `Linux • ${this.detectBrowserShort()}`;
+
+                return `Web Device (${this.deviceId.slice(-4)})`;
+            },
+
+            detectBrowserShort() {
+                const ua = navigator.userAgent || "";
+                if (/Edg\//i.test(ua)) return "Edge";
+                if (/OPR\//i.test(ua)) return "Opera";
+                if (/Chrome\//i.test(ua)) return "Chrome";
+                if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) return "Safari";
+                if (/Firefox\//i.test(ua)) return "Firefox";
+                return "Browser";
+            }
+        };
+
+        // ===================================================================
+        // BACKEND-COMPATIBLE API SERVICE ADAPTER
+        // ===================================================================
+        const ApiService = {
+            getHeaders() {
+                const userId = state?.userProfile?.id || "anonymous";
+                return {
+                    "Content-Type": "application/json",
+                    "X-User-Id": userId,
+                    "X-Device-Id": DeviceIdentity.deviceId,
+                    "X-Device-Name": DeviceIdentity.deviceName
+                };
+            },
+
+            async request(endpoint, method = "GET", body = null) {
+                // Always persist locally so the app works offline & immediately
+                saveLocalState();
+
+                if (!CONFIG.API_BASE_URL) {
+                    return { ok: true, localOnly: true, data: body };
+                }
+
+                try {
+                    const res = await fetch(`${CONFIG.API_BASE_URL}${endpoint}`, {
+                        method,
+                        headers: this.getHeaders(),
+                        body: body ? JSON.stringify(body) : null
+                    });
+                    return await res.json();
+                } catch (err) {
+                    console.warn(`[ApiService] Network fallback for ${method} ${endpoint}:`, err);
+                    return { ok: false, offlineFallback: true };
+                }
+            },
+
+            async saveProfile(profile) {
+                return this.request("/api/users/profile", "POST", profile);
+            },
+            async createEvent(eventObj) {
+                return this.request("/api/events", "POST", eventObj);
+            },
+            async addParticipant(eventId, participantObj) {
+                return this.request(`/api/events/${eventId}/join`, "POST", participantObj);
+            },
+            async createExpense(eventId, expenseObj) {
+                return this.request(`/api/events/${eventId}/expenses`, "POST", expenseObj);
+            },
+            async toggleExpenseCleared(eventId, expenseId, cleared) {
+                return this.request(`/api/events/${eventId}/expenses/${expenseId}`, "PATCH", { cleared });
+            },
+            async deleteExpense(eventId, expenseId) {
+                return this.request(`/api/events/${eventId}/expenses/${expenseId}`, "DELETE");
+            },
+            async recordSettlement(eventId, settlementObj) {
+                return this.request(`/api/events/${eventId}/settlements`, "POST", settlementObj);
+            },
+            async addCustomCategory(categoryName) {
+                return this.request("/api/categories", "POST", { name: categoryName });
+            }
+        };
+
+        // ===================================================================
+        // CLEAN PRODUCTION STATE (Zero Pre-loaded Fake Demo Data)
+        // ===================================================================
+        function getCleanInstalledState() {
+            return {
+                // Null until the user completes the 1-step onboarding setup
+                userProfile: null, // { id, name, upi, pfp, deviceName, deviceId, createdAt }
+                categories: [...DEFAULT_CATEGORIES],
+                activeEventId: null,
+                homeFilter: "ALL",
+                selectedCategoryFilter: null,
+                txSubTab: "ALL",
+                calFilter: "ALL",
+                selectedCalDay: null,
+                calYear: 2026,
+                calMonth: 10, // 0-indexed (10 = November 2026)
+                events: [] // Clean array; user creates or joins events
+            };
+        }
+
+        let state = loadLocalState();
+        let currentTab = "HOME";
+        let modalPayMode = "UPI";
+        let modalSelectedCategory = "Food & Drinks";
+        let modalParticipants = new Set();
+        let pendingUpiTransfer = null;
+        let onboardingTempPfp = DEFAULT_MONOLITH_PFP;
+
+        function loadLocalState() {
+            try {
+                const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (!parsed.categories || parsed.categories.length === 0) {
+                        parsed.categories = [...DEFAULT_CATEGORIES];
+                    }
+                    return parsed;
+                }
+            } catch (e) {
+                console.warn("Could not read localStorage:", e);
+            }
+            return getCleanInstalledState();
+        }
+
+        function saveLocalState() {
+            try {
+                localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.warn("Could not save state:", e);
+            }
+        }
+
+        function getActiveEvent() {
+            if (!state.events || state.events.length === 0) return null;
+            return state.events.find(e => e.id === state.activeEventId) || state.events[0];
+        }
+
+        // Lookup a participant's PFP or UPI across the current event or user profile
+        function getMemberDetails(memberName, evt) {
+            if (state.userProfile && state.userProfile.name.toLowerCase() === (memberName || "").toLowerCase()) {
+                return {
+                    name: state.userProfile.name,
+                    upi: state.userProfile.upi || "",
+                    pfp: state.userProfile.pfp || DEFAULT_MONOLITH_PFP,
+                    deviceName: state.userProfile.deviceName
+                };
+            }
+            const targetEvt = evt || getActiveEvent();
+            if (targetEvt && targetEvt.memberProfiles && targetEvt.memberProfiles[memberName]) {
+                const mp = targetEvt.memberProfiles[memberName];
+                return {
+                    name: memberName,
+                    upi: mp.upi || "",
+                    pfp: mp.pfp || generateInitialsAvatar(memberName),
+                    deviceName: mp.deviceName || "Member Device"
+                };
+            }
+            return {
+                name: memberName,
+                upi: "",
+                pfp: generateInitialsAvatar(memberName),
+                deviceName: "Member Phone"
+            };
+        }
+
+        // ===================================================================
+        // PFP UPLOAD & HTML5 CANVAS COMPRESSION (Works in Onboarding & Profile)
+        // ===================================================================
+        window.triggerPfpUpload = function() {
+            const fileInput = document.getElementById("globalPfpFileInput");
+            if (fileInput) {
+                fileInput.value = "";
+                fileInput.click();
+            }
+        };
+
+        window.handlePfpFileSelected = function(event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // Center-crop and compress to 200x200 square JPEG DataURL so localStorage and API payloads stay fast
+                    const canvas = document.createElement("canvas");
+                    const size = 200;
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext("2d");
+
+                    const minSide = Math.min(img.width, img.height);
+                    const sx = (img.width - minSide) / 2;
+                    const sy = (img.height - minSide) / 2;
+
+                    ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+                    const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.86);
+
+                    onboardingTempPfp = compressedDataUrl;
+                    const onbImg = document.getElementById("onboardingPfpPreview");
+                    if (onbImg) onbImg.src = compressedDataUrl;
+
+                    if (state.userProfile) {
+                        state.userProfile.pfp = compressedDataUrl;
+                        // Also update user's PFP across any events and expenses they created
+                        state.events.forEach(evt => {
+                            if (evt.memberProfiles && evt.memberProfiles[state.userProfile.name]) {
+                                evt.memberProfiles[state.userProfile.name].pfp = compressedDataUrl;
+                            }
+                            (evt.expenses || []).forEach(exp => {
+                                if (exp.createdByUserId === state.userProfile.id || exp.createdBy === state.userProfile.name) {
+                                    exp.createdByPfp = compressedDataUrl;
+                                }
+                            });
+                        });
+                        ApiService.saveProfile(state.userProfile);
+                        renderAll();
+                        showToast("Profile picture updated across all transactions");
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // ===================================================================
+        // FIRST-TIME ONBOARDING SETUP & SHARED LINK AUTO-JOIN
+        // ===================================================================
+        function getInvitedEventCodeFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("event")) return params.get("event");
+            const hash = window.location.hash || "";
+            if (hash.startsWith("#event=")) return decodeURIComponent(hash.replace("#event=", ""));
+            return null;
+        }
+
+        function checkOnboardingStatus() {
+            const inviteCode = getInvitedEventCodeFromUrl();
+            document.getElementById("onboardingPfpPreview").src = onboardingTempPfp;
+            document.getElementById("onboardingDetectedDeviceName").textContent = DeviceIdentity.deviceName;
+            document.getElementById("onboardingDetectedDeviceId").textContent = DeviceIdentity.deviceId;
+
+            if (inviteCode) {
+                document.getElementById("onboardingInviteBanner").classList.remove("hidden");
+                document.getElementById("onboardingInviteCodeText").textContent = `Event Code: ${inviteCode}`;
+            }
+
+            if (!state.userProfile) {
+                document.getElementById("onboardingScreen").classList.remove("hidden");
+            } else {
+                // Keep deviceName synced with hardware extraction
+                state.userProfile.deviceName = DeviceIdentity.deviceName;
+                state.userProfile.deviceId = DeviceIdentity.deviceId;
+                document.getElementById("onboardingScreen").classList.add("hidden");
+                handleInviteCodeAutoJoin(inviteCode);
+            }
+        }
+
+        window.completeOnboardingSetup = async function() {
+            const nameRaw = (document.getElementById("onboardingNameInput").value || "").trim();
+            const upiRaw = (document.getElementById("onboardingUpiInput").value || "").trim();
+
+            if (!nameRaw) {
+                showToast("Please enter your name to continue", "error");
+                document.getElementById("onboardingNameInput").focus();
+                return;
+            }
+
+            const cleanName = nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1);
+            const newProfile = {
+                id: "usr_" + DeviceIdentity.deviceId.replace(/[^A-Z0-9]/gi, "").toLowerCase(),
+                name: cleanName,
+                upi: upiRaw,
+                pfp: onboardingTempPfp || DEFAULT_MONOLITH_PFP,
+                deviceName: DeviceIdentity.deviceName,
+                deviceId: DeviceIdentity.deviceId,
+                createdAt: new Date().toISOString()
+            };
+
+            state.userProfile = newProfile;
+            await ApiService.saveProfile(newProfile);
+
+            const inviteCode = getInvitedEventCodeFromUrl();
+            handleInviteCodeAutoJoin(inviteCode);
+
+            document.getElementById("onboardingScreen").classList.add("hidden");
+            renderAll();
+            showToast(`Welcome, ${cleanName}! Device linked: ${DeviceIdentity.deviceName}`);
+        };
+
+        function handleInviteCodeAutoJoin(inviteCode) {
+            if (!inviteCode || !state.userProfile) return;
+            const me = state.userProfile;
+            let existingEvt = state.events.find(e => e.code.toLowerCase() === inviteCode.toLowerCase());
+
+            if (!existingEvt) {
+                // Create the shared event room locally if joining via URL link on a fresh browser
+                const prettyTitle = inviteCode
+                    .replace(/-\d+$/, "")
+                    .split("-")
+                    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                    .join(" ") || "Shared Event";
+
+                const now = new Date();
+                existingEvt = createEventObject(prettyTitle, now.toISOString().slice(0, 10), inviteCode);
+                state.events.unshift(existingEvt);
+            }
+
+            if (!existingEvt.members.includes(me.name)) {
+                existingEvt.members.push(me.name);
+            }
+            if (!existingEvt.memberProfiles) existingEvt.memberProfiles = {};
+            existingEvt.memberProfiles[me.name] = {
+                name: me.name,
+                upi: me.upi,
+                pfp: me.pfp,
+                deviceName: me.deviceName,
+                deviceId: me.deviceId
+            };
+
+            state.activeEventId = existingEvt.id;
+            ApiService.addParticipant(existingEvt.id, existingEvt.memberProfiles[me.name]);
+        }
+
+        // ===================================================================
+        // FINANCIAL & SETTLEMENT ENGINE
+        // ===================================================================
+        function computeEventFinancials(evt) {
+            if (!evt) {
+                return {
+                    stats: {},
+                    totalSpend: 0,
+                    upiSpend: 0,
+                    cashSpend: 0,
+                    unclearCount: 0,
+                    categoryTotals: {},
+                    transfers: []
+                };
+            }
+
+            const members = evt.members || [];
+            const stats = {};
+            members.forEach(m => {
+                stats[m] = { paid: 0, share: 0, net: 0 };
+            });
+
+            let totalSpend = 0;
+            let upiSpend = 0;
+            let cashSpend = 0;
+            let unclearCount = 0;
+            const categoryTotals = {};
+
+            (evt.expenses || []).forEach(exp => {
+                const amt = Number(exp.amount) || 0;
+                totalSpend += amt;
+                if (exp.method === "Cash") cashSpend += amt;
+                else upiSpend += amt;
+
+                if (!exp.cleared) unclearCount++;
+
+                const cat = exp.category || "Untagged";
+                categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
+
+                if (!stats[exp.paidBy]) {
+                    stats[exp.paidBy] = { paid: 0, share: 0, net: 0 };
+                }
+                stats[exp.paidBy].paid += amt;
+
+                const validParts = (exp.participants || []).filter(p => p);
+                if (validParts.length > 0) {
+                    const perHead = amt / validParts.length;
+                    validParts.forEach(p => {
+                        if (!stats[p]) stats[p] = { paid: 0, share: 0, net: 0 };
+                        stats[p].share += perHead;
+                    });
+                }
+            });
+
+            Object.keys(stats).forEach(m => {
+                stats[m].net = stats[m].paid - stats[m].share;
+            });
+
+            // Account for already settled transfers
+            (evt.settledTransfers || []).forEach(st => {
+                const amt = Number(st.amount) || 0;
+                if (stats[st.from]) stats[st.from].net += amt;
+                if (stats[st.to]) stats[st.to].net -= amt;
+            });
+
+            // Min-Cash-Flow Debt Simplification
+            const debtors = [];
+            const creditors = [];
+            Object.keys(stats).forEach(m => {
+                const net = Math.round(stats[m].net * 100) / 100;
+                if (net < -0.5) debtors.push({ name: m, amount: Math.abs(net) });
+                else if (net > 0.5) creditors.push({ name: m, amount: net });
+            });
+
+            debtors.sort((a, b) => b.amount - a.amount);
+            creditors.sort((a, b) => b.amount - a.amount);
+
+            const transfers = [];
+            let i = 0, j = 0;
+            while (i < debtors.length && j < creditors.length) {
+                const d = debtors[i];
+                const c = creditors[j];
+                const amt = Math.min(d.amount, c.amount);
+                if (amt >= 0.5) {
+                    transfers.push({
+                        from: d.name,
+                        to: c.name,
+                        amount: Math.round(amt)
+                    });
+                }
+                d.amount -= amt;
+                c.amount -= amt;
+                if (d.amount < 0.5) i++;
+                if (c.amount < 0.5) j++;
+            }
+
+            return {
+                stats,
+                totalSpend,
+                upiSpend,
+                cashSpend,
+                unclearCount,
+                categoryTotals,
+                transfers
+            };
+        }
+
+        function computePersonalAllTimeTotals() {
+            if (!state.userProfile) return { spent: 0, gotBack: 0 };
+            const me = state.userProfile.name;
+            let totalSpent = 0;
+            let totalGotBack = 0;
+
+            state.events.forEach(evt => {
+                const fin = computeEventFinancials(evt);
+                const myStat = fin.stats[me];
+                if (myStat) {
+                    totalSpent += myStat.paid;
+                    const net = myStat.paid - myStat.share;
+                    if (net > 0) totalGotBack += net;
+                }
+            });
+
+            return {
+                spent: Math.round(totalSpent),
+                gotBack: Math.round(totalGotBack)
+            };
+        }
+
+        // ===================================================================
+        // RENDER ALL VIEWS
+        // ===================================================================
+        function renderAll() {
+            if (!state.userProfile) return;
+            renderHomeTab();
+            renderTransactionsTab();
+            renderEventsTab();
+            renderCalendarTab();
+            renderProfileOverlayData();
+        }
+
+        // -------------------------------------------------------------------
+        // 1. RENDER HOME TAB (Fold 1 & Fold 2 UI + Category Bars + PFP Circles)
+        // -------------------------------------------------------------------
+        function renderHomeTab() {
+            const me = state.userProfile;
+            const evt = getActiveEvent();
+            const fin = computeEventFinancials(evt);
+
+            // Profile Header on Home
+            document.getElementById("homeProfileAvatarImg").src = me.pfp || DEFAULT_MONOLITH_PFP;
+            document.getElementById("homeProfileName").textContent = me.name;
+
+            if (!evt) {
+                document.getElementById("homeTopEventName").textContent = "Create Event";
+                document.getElementById("homeTopPeopleCount").textContent = "(1)";
+                document.getElementById("homeProfileSubtitle").textContent = "Create your first event link";
+                document.getElementById("homeShareLinkText").textContent = "Tap '+ Event' to start an event link";
+                document.getElementById("homeTotalSpendWhole").textContent = "0";
+                document.getElementById("homeUpiCashSplitText").textContent = "UPI ₹0 • Cash ₹0";
+                document.getElementById("homeSpendingDateLabel").textContent = "NO ACTIVE EVENT";
+                document.getElementById("homeParticipantAvatarsRow").innerHTML = "";
+                document.getElementById("homeCategoryBarsList").innerHTML = `
+                    <div class="p-6 text-center space-y-3">
+                        <div class="text-sm font-semibold text-white">No Event Created Yet</div>
+                        <p class="text-xs text-[#8b8e96]">Create an event for your outing, share the web link with friends, and track everyone's spends in one place.</p>
+                        <button onclick="openCreateEventModal()" class="px-4 py-2.5 rounded-xl bg-fold-blue text-black font-extrabold text-xs">
+                            + Create First Event Link
+                        </button>
+                    </div>
+                `;
+                document.getElementById("homeSpendingsList").innerHTML = "";
+                renderHomeSettlementsSection(null, fin);
+                return;
+            }
+
+            // Event Top Bar & Share Link
+            document.getElementById("homeTopEventName").textContent = evt.name;
+            document.getElementById("homeTopPeopleCount").textContent = `(${evt.members.length})`;
+            document.getElementById("homeShareLinkText").textContent = `${window.location.host || 'foldsplit.app'}/?event=${evt.code}`;
+
+            const pendingCount = fin.transfers.length;
+            document.getElementById("homeProfileSubtitle").textContent =
+                pendingCount > 0 ? `${pendingCount} pending settlement${pendingCount > 1 ? 's' : ''}` : `All splits settled`;
+
+            // Total Spend Card
+            document.getElementById("homeTotalSpendWhole").textContent = Math.floor(fin.totalSpend).toLocaleString("en-IN");
+            document.getElementById("homeTotalSpendDec").textContent = ".00";
+            document.getElementById("homeUpiCashSplitText").textContent =
+                `UPI ₹${fin.upiSpend.toLocaleString("en-IN")} • Cash ₹${fin.cashSpend.toLocaleString("en-IN")}`;
+
+            // Spending Summary Header & Filter Circles
+            document.getElementById("homeSpendingDateLabel").textContent = evt.dateStr.toUpperCase();
+            ["ALL", "UPI", "Cash"].forEach(f => {
+                const btn = document.getElementById(`homeFilter_${f}`);
+                if (!btn) return;
+                btn.className = state.homeFilter === f
+                    ? "w-8 h-8 rounded-full border-2 border-fold-blue bg-[#182238] text-[10px] font-bold text-white flex items-center justify-center transition"
+                    : "w-8 h-8 rounded-full border border-[#262930] bg-[#0c0d10] text-[10px] font-bold text-[#9ca3af] flex items-center justify-center transition";
+            });
+
+            // Participant PFP Circles Row (Matches circular badges row in fold 2.jpeg)
+            const avatarsRow = document.getElementById("homeParticipantAvatarsRow");
+            avatarsRow.innerHTML = evt.members.map(mName => {
+                const det = getMemberDetails(mName, evt);
+                return `
+                    <div class="flex items-center gap-1.5 pr-2.5 py-1 pl-1 rounded-full bg-[#0c0d10] border border-[#262930] shrink-0" title="${mName}">
+                        <img src="${det.pfp}" alt="${mName}" class="w-7 h-7 rounded-full object-cover">
+                        <span class="text-xs font-medium text-[#d1d5db]">${mName}</span>
+                    </div>
+                `;
+            }).join("");
+
+            // Category Proportional Bars (Exact Fold 2 style: Shopping -₹828, Food & Drinks -₹209)
+            const catEntries = Object.entries(fin.categoryTotals).sort((a, b) => b[1] - a[1]);
+            const maxCatAmt = Math.max(...catEntries.map(c => c[1]), 1);
+            const catBarsEl = document.getElementById("homeCategoryBarsList");
+
+            if (catEntries.length === 0) {
+                catBarsEl.innerHTML = `<div class="text-center py-4 text-xs text-[#686b73]">No expenses added to ${evt.name} yet. Tap "+ Add Spend" above.</div>`;
+            } else {
+                catBarsEl.innerHTML = catEntries.map(([catName, catSum]) => {
+                    const widthPct = Math.max(18, Math.min(100, Math.round((catSum / maxCatAmt) * 75)));
+                    const isSelected = state.selectedCategoryFilter === catName;
+                    return `
+                        <div onclick="toggleCategoryFilter('${catName.replace(/'/g, "\\'")}')" class="flex items-center justify-between py-1 cursor-pointer group">
+                            <div class="relative flex-1 mr-4">
+                                <div class="h-10 rounded-xl ${isSelected ? 'bg-fold-blue/30 border border-fold-blue' : 'bg-[#2a2c32]/75 group-hover:bg-[#32353d]'} transition-all duration-300" style="width: ${widthPct}%"></div>
+                                <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] font-semibold text-white whitespace-nowrap">
+                                    ${catName} ${isSelected ? '✕' : ''}
+                                </span>
+                            </div>
+                            <span class="text-[15px] font-semibold text-[#e5e7eb] tabular-nums shrink-0">
+                                -₹${Math.round(catSum).toLocaleString("en-IN")}
+                            </span>
+                        </div>
+                    `;
+                }).join("");
+            }
+
+            // Detailed Expense Items Below Category Summary
+            let filteredExp = [...(evt.expenses || [])];
+            if (state.homeFilter === "UPI") filteredExp = filteredExp.filter(e => e.method === "UPI");
+            if (state.homeFilter === "Cash") filteredExp = filteredExp.filter(e => e.method === "Cash");
+            if (state.selectedCategoryFilter) {
+                filteredExp = filteredExp.filter(e => (e.category || "Untagged") === state.selectedCategoryFilter);
+            }
+
+            const listEl = document.getElementById("homeSpendingsList");
+            if (filteredExp.length === 0) {
+                listEl.innerHTML = "";
+            } else {
+                listEl.innerHTML = filteredExp.map(exp => {
+                    const perPerson = Math.round((exp.amount / Math.max(1, exp.participants.length)) * 10) / 10;
+                    const creatorPfp = exp.createdByPfp || getMemberDetails(exp.createdBy, evt).pfp;
+
+                    return `
+                        <div class="p-3.5 rounded-2xl bg-[#16181d] border border-[#23262e] space-y-2.5 transition">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <img src="${creatorPfp}" alt="${exp.createdBy}" class="w-8 h-8 rounded-full object-cover border border-[#2e323c] shrink-0">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[15px] font-semibold text-white truncate">${exp.title}</span>
+                                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#23262e] text-fold-blueText font-semibold shrink-0">${exp.category || 'Expense'}</span>
+                                        </div>
+                                        <div class="text-[11px] text-[#9ca3af] truncate">
+                                            <strong class="text-[#d1d5db]">${exp.createdBy}</strong> added • <span class="font-mono text-[#787b84]">${exp.deviceUsed}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <div class="text-[15px] font-bold text-white tabular-nums">-₹${Number(exp.amount).toLocaleString("en-IN")}</div>
+                                    <div class="text-[10px] font-mono text-[#8b8e96]">${exp.method}</div>
+                                </div>
+                            </div>
+
+                            <!-- Paid By & Participants Row -->
+                            <div class="pt-2 border-t border-[#22252c] flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                <div class="text-[#9ca3af]">
+                                    Paid by <strong class="text-white">${exp.paidBy}</strong> • ₹${perPerson}/person
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="toggleExpenseCleared('${evt.id}', '${exp.id}')" class="px-2 py-0.5 rounded-md font-semibold ${
+                                        exp.cleared ? 'bg-fold-green/20 text-fold-green' : 'bg-[#23262e] text-[#9ca3af]'
+                                    }">
+                                        ${exp.cleared ? '✓ Cleared' : '⏳ Unclear'}
+                                    </button>
+                                    <button onclick="deleteExpenseFromEvent('${evt.id}', '${exp.id}')" class="text-[#686b73] hover:text-fold-red px-1" title="Delete">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Participant Chips -->
+                            <div class="flex flex-wrap items-center gap-1">
+                                <span class="text-[10px] text-[#787b84] mr-1">Participants (${exp.participants.length}):</span>
+                                ${evt.members.map(m => {
+                                    const isIn = exp.participants.includes(m);
+                                    return isIn
+                                        ? `<span class="px-2 py-0.5 rounded-md bg-[#22252d] text-[#e5e7eb] text-[10px] font-medium">${m}</span>`
+                                        : `<span class="px-1.5 py-0.5 rounded-md text-[#52555e] line-through text-[10px]">${m}</span>`;
+                                }).join("")}
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+
+            renderHomeSettlementsSection(evt, fin);
+        }
+
+        function renderHomeSettlementsSection(evt, fin) {
+            const me = state.userProfile;
+            document.getElementById("settlementActiveProfileTitle").textContent = `${me.name.toUpperCase()}'S LEDGER`;
+            document.getElementById("settlementActiveDeviceTag").textContent = me.deviceName;
+            document.getElementById("settlementActiveUpiId").textContent = me.upi ? me.upi : "Tap 'Edit Profile' to add your UPI ID";
+
+            const myStat = (fin.stats && fin.stats[me.name]) ? fin.stats[me.name] : { paid: 0, share: 0, net: 0 };
+            document.getElementById("settleMyPaid").textContent = `₹${Math.round(myStat.paid).toLocaleString("en-IN")}`;
+            document.getElementById("settleMyShare").textContent = `₹${Math.round(myStat.share).toLocaleString("en-IN")}`;
+            const myNetVal = Math.round(myStat.net);
+            const netEl = document.getElementById("settleMyNet");
+            netEl.textContent = myNetVal >= 0 ? `+₹${myNetVal}` : `-₹${Math.abs(myNetVal)}`;
+            netEl.className = `text-sm font-bold tabular-nums mt-0.5 ${myNetVal >= 0 ? 'text-fold-green' : 'text-fold-red'}`;
+
+            const myToPay = fin.transfers.filter(t => t.from === me.name);
+            const myToReceive = fin.transfers.filter(t => t.to === me.name);
+            const otherTransfers = fin.transfers.filter(t => t.from !== me.name && t.to !== me.name);
+
+            const sumPay = myToPay.reduce((s, t) => s + t.amount, 0);
+            const sumRec = myToReceive.reduce((s, t) => s + t.amount, 0);
+            document.getElementById("settleToPayTotalBadge").textContent = `₹${sumPay}`;
+            document.getElementById("settleToReceiveTotalBadge").textContent = `+₹${sumRec}`;
+
+            const payEl = document.getElementById("homeMyPayList");
+            if (myToPay.length === 0) {
+                payEl.innerHTML = `<div class="p-3 rounded-xl bg-[#16181d] text-xs text-[#8b8e96]">You don't owe anyone right now.</div>`;
+            } else {
+                payEl.innerHTML = myToPay.map(t => {
+                    const recInfo = getMemberDetails(t.to, evt);
+                    return `
+                        <div class="p-3 rounded-xl bg-[#16181d] border border-fold-red/30 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2.5">
+                                <img src="${recInfo.pfp}" class="w-8 h-8 rounded-full object-cover">
+                                <div>
+                                    <div class="text-xs font-semibold text-white">Pay <span class="text-fold-red">${t.to}</span></div>
+                                    <div class="text-[11px] font-mono text-[#787b84]">${recInfo.upi || 'UPI / Cash'}</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold text-white tabular-nums">₹${t.amount}</span>
+                                <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-3 py-1.5 rounded-xl bg-fold-blue text-black font-extrabold text-xs flex items-center gap-1 active:scale-95 transition">
+                                    <span>Pay UPI</span>
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+
+            const recEl = document.getElementById("homeMyReceiveList");
+            if (myToReceive.length === 0) {
+                recEl.innerHTML = `<div class="p-3 rounded-xl bg-[#16181d] text-xs text-[#8b8e96]">No pending repayments owed to you.</div>`;
+            } else {
+                recEl.innerHTML = myToReceive.map(t => {
+                    const fromInfo = getMemberDetails(t.from, evt);
+                    return `
+                        <div class="p-3 rounded-xl bg-[#16181d] border border-fold-green/30 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2.5">
+                                <img src="${fromInfo.pfp}" class="w-8 h-8 rounded-full object-cover">
+                                <div>
+                                    <div class="text-xs font-semibold text-white">Get back from <span class="text-fold-green">${t.from}</span></div>
+                                    <div class="text-[11px] text-[#787b84]">Owes you for this event</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold text-fold-green tabular-nums">+₹${t.amount}</span>
+                                <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-2.5 py-1 rounded-lg bg-[#23262e] text-xs font-semibold text-white">
+                                    Settle
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+
+            const othersEl = document.getElementById("homeOthersSettlementList");
+            if (otherTransfers.length === 0) {
+                othersEl.innerHTML = `<div class="p-3 rounded-xl bg-[#16181d] text-xs text-[#8b8e96]">No other pending transfers between friends.</div>`;
+            } else {
+                othersEl.innerHTML = otherTransfers.map(t => `
+                    <div class="px-3.5 py-2.5 rounded-xl bg-[#16181d] border border-[#23252a] flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-white">${t.from}</span>
+                            <span class="text-[#787b84]">pays</span>
+                            <span class="font-bold text-fold-blueText">${t.to}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-white tabular-nums">₹${t.amount}</span>
+                            <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-2 py-0.5 rounded bg-fold-navyPill text-fold-blueText text-[11px] font-bold">
+                                Pay ↗
+                            </button>
+                        </div>
+                    </div>
+                `).join("");
+            }
+        }
+
+        window.toggleCategoryFilter = function(catName) {
+            if (state.selectedCategoryFilter === catName) {
+                state.selectedCategoryFilter = null;
+            } else {
+                state.selectedCategoryFilter = catName;
+            }
+            renderHomeTab();
+        };
+
+        // -------------------------------------------------------------------
+        // 2. RENDER TRANSACTIONS TAB (Fold 3 UI — Shows Creator's PFP on Every Transaction Card)
+        // -------------------------------------------------------------------
+        function renderTransactionsTab() {
+            const query = (document.getElementById("txSearchInput")?.value || "").trim().toLowerCase();
+
+            const allItems = [];
+            state.events.forEach(evt => {
+                (evt.expenses || []).forEach(exp => {
+                    allItems.push({
+                        evtId: evt.id,
+                        evtName: evt.name,
+                        evt,
+                        exp
+                    });
+                });
+            });
+
+            ["ALL", "UNCLEAR", "CLEARED"].forEach(t => {
+                const btn = document.getElementById(`txTab_${t}`);
+                if (!btn) return;
+                btn.className = state.txSubTab === t
+                    ? "pb-2.5 text-white border-b-2 border-white whitespace-nowrap transition"
+                    : "pb-2.5 text-[#787b84] hover:text-white whitespace-nowrap transition";
+            });
+
+            const filtered = allItems.filter(item => {
+                if (state.txSubTab === "UNCLEAR" && item.exp.cleared) return false;
+                if (state.txSubTab === "CLEARED" && !item.exp.cleared) return false;
+                if (query) {
+                    const hay = `${item.exp.title} ${item.exp.category || ''} ${item.exp.createdBy} ${item.exp.paidBy} ${item.exp.deviceUsed} ${item.evtName}`.toLowerCase();
+                    return hay.includes(query);
+                }
+                return true;
+            });
+
+            document.getElementById("txTotalCountLabel").textContent = `${filtered.length} transaction${filtered.length === 1 ? '' : 's'}`;
+
+            const container = document.getElementById("txListContainer");
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="fold-card p-8 text-center text-xs text-[#787b84]">No transactions yet. Add an expense in any event to see it here.</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(({ evtId, evtName, evt, exp }) => {
+                const creatorPfp = exp.createdByPfp || getMemberDetails(exp.createdBy, evt).pfp;
+                return `
+                    <div class="fold-card p-4 space-y-3">
+                        <!-- Top Row: Title & Creator+Device on Left, Timestamp on Right (Exact Fold 3 layout) -->
+                        <div class="flex items-start justify-between pb-2.5 border-b border-[#202228] gap-2">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[15px] font-semibold text-[#e5e7eb] truncate">${exp.title}</span>
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#1d1f24] text-[#9ca3af] shrink-0">${evtName}</span>
+                                </div>
+                                <div class="text-[11.5px] text-[#8b8e96] mt-0.5 truncate">
+                                    Added by <strong class="text-[#d1d5db]">${exp.createdBy}</strong> (${exp.deviceUsed}) • Paid by <strong class="text-[#d1d5db]">${exp.paidBy}</strong>
+                                </div>
+                            </div>
+                            <span class="text-[13px] text-[#787b84] shrink-0">${exp.timeStr || ''}</span>
+                        </div>
+
+                        <!-- Bottom Row: Bold -₹Amount on Left, Category Pill + Clear Status Pill + Creator Circular PFP on Right (Matches fold 3.jpeg) -->
+                        <div class="flex items-center justify-between pt-0.5">
+                            <div class="tabular-nums flex items-baseline">
+                                <span class="text-sm text-[#787b84] mr-1">-</span>
+                                <span class="text-xs font-bold text-[#9ca3af] mr-0.5 -translate-y-1.5">₹</span>
+                                <span class="text-[22px] font-extrabold text-white">${Number(exp.amount).toLocaleString("en-IN")}</span>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <!-- Category Tag Pill (Matches DONATION / TAG pill in fold 3.jpeg) -->
+                                <span class="px-3 py-1.5 rounded-full bg-[#090a0c] border border-[#23262e] text-[11px] font-bold tracking-wider uppercase text-[#e5e7eb] flex items-center gap-1.5">
+                                    <i class="fa-solid fa-tag text-[10px] text-fold-blueText"></i>
+                                    <span>${exp.category || 'EXPENSE'}</span>
+                                </span>
+
+                                <!-- Cleared / Unclear Toggle Pill -->
+                                <button onclick="toggleExpenseCleared('${evtId}', '${exp.id}')" class="px-3 py-1.5 rounded-full border text-[11px] font-bold tracking-wider uppercase transition ${
+                                    exp.cleared
+                                        ? 'bg-[#0b1f15] border-fold-green/40 text-fold-green'
+                                        : 'bg-[#090a0c] border-[#262930] text-[#9ca3af] hover:text-white'
+                                }">
+                                    ${exp.cleared ? '✓ CLEAR' : 'UNCLEAR'}
+                                </button>
+
+                                <!-- Creator's Circular Profile Picture (Exact position of circular badge in fold 3.jpeg) -->
+                                <img src="${creatorPfp}" alt="${exp.createdBy}" title="Added by ${exp.createdBy} (${exp.deviceUsed})" class="w-7 h-7 rounded-full object-cover border border-[#323640] shrink-0">
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        // -------------------------------------------------------------------
+        // 3. RENDER EVENTS TAB (Fold 4 UI adapted to Events)
+        // -------------------------------------------------------------------
+        function renderEventsTab() {
+            let grandTotal = 0;
+            const listEl = document.getElementById("eventsPortfolioList");
+
+            if (state.events.length === 0) {
+                listEl.innerHTML = `
+                    <div class="fold-card p-6 text-center space-y-2">
+                        <div class="text-sm font-semibold text-white">No Events Created Yet</div>
+                        <p class="text-xs text-[#787b84]">Tap "Create New Event Link" below to start tracking an outing with friends.</p>
+                    </div>
+                `;
+                document.getElementById("eventsGrandTotalValue").textContent = "₹0";
+                document.getElementById("eventsBottomSyncStatus").textContent = "0 EVENTS CREATED";
+                return;
+            }
+
+            listEl.innerHTML = state.events.map(evt => {
+                const fin = computeEventFinancials(evt);
+                grandTotal += fin.totalSpend;
+                const isActive = evt.id === state.activeEventId;
+                const allCleared = fin.unclearCount === 0 && (evt.expenses || []).length > 0;
+
+                return `
+                    <div onclick="selectActiveEvent('${evt.id}')" class="fold-card px-4 py-4 flex items-center justify-between cursor-pointer hover:border-fold-blue/60 transition">
+                        <div class="flex items-center gap-3.5 min-w-0">
+                            <div class="w-9 h-9 rounded-xl bg-white text-black font-extrabold text-sm flex items-center justify-center shrink-0">
+                                ${evt.iconLetter || evt.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[16px] font-semibold text-[#e5e7eb] truncate">${evt.name}</span>
+                                    ${allCleared ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-fold-green/20 text-fold-green font-bold">CLEARED</span>' : ''}
+                                </div>
+                                <div class="text-xs text-[#787b84] mt-0.5 tabular-nums">
+                                    ${evt.dateStr} • ${evt.members.length} people • <strong class="text-[#d1d5db]">₹${fin.totalSpend.toLocaleString("en-IN")}</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="px-3.5 py-2 rounded-xl ${
+                            isActive
+                                ? 'bg-fold-blue text-black font-extrabold'
+                                : 'bg-fold-navyPill text-fold-blueText font-bold'
+                        } text-[11px] tracking-wider uppercase shrink-0">
+                            ${isActive ? 'ACTIVE' : 'OPEN'}
+                        </button>
+                    </div>
+                `;
+            }).join("");
+
+            document.getElementById("eventsGrandTotalValue").textContent = `₹${grandTotal.toLocaleString("en-IN")}`;
+            document.getElementById("eventsBottomSyncStatus").textContent = `${state.events.length} EVENT${state.events.length === 1 ? '' : 'S'} • AUTO-SYNC ACTIVE`;
+        }
+
+        // -------------------------------------------------------------------
+        // 4. RENDER CALENDAR TAB (Fold 5 UI adapted to Events Calendar)
+        // -------------------------------------------------------------------
+        function renderCalendarTab() {
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            const monthShortNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+            const yr = state.calYear;
+            const mo = state.calMonth;
+            document.getElementById("calMonthTitle").textContent = `${monthNames[mo]} ‘${String(yr).slice(-2)}`;
+
+            const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+            const firstDayOfWeek = new Date(yr, mo, 1).getDay();
+
+            const dayEventMap = {};
+            let totalClearedEvents = 0;
+            let unclearSpend = 0;
+            let clearedSpend = 0;
+
+            state.events.forEach(evt => {
+                const fin = computeEventFinancials(evt);
+                if (fin.unclearCount === 0 && (evt.expenses || []).length > 0) totalClearedEvents++;
+
+                (evt.expenses || []).forEach(exp => {
+                    const amt = Number(exp.amount) || 0;
+                    if (exp.cleared) clearedSpend += amt;
+                    else unclearSpend += amt;
+                });
+
+                if (evt.yearNum === yr && evt.monthIndex === mo) {
+                    dayEventMap[evt.dayNum] = { evt, fin };
+                }
+            });
+
+            document.getElementById("calClearedRatioText").textContent = `Cleared ${totalClearedEvents} / ${state.events.length}`;
+            document.getElementById("calMetricUnclear").textContent = `₹${unclearSpend.toLocaleString("en-IN")}`;
+            document.getElementById("calMetricEventsCount").textContent = `${state.events.length}`;
+            document.getElementById("calMetricCleared").textContent = `₹${clearedSpend.toLocaleString("en-IN")}`;
+
+            let cellsHtml = "";
+            for (let b = 0; b < firstDayOfWeek; b++) {
+                cellsHtml += `<div class="h-10"></div>`;
+            }
+
+            const today = new Date();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const match = dayEventMap[day];
+                const isSelected = state.selectedCalDay === day;
+                const isToday = today.getFullYear() === yr && today.getMonth() === mo && today.getDate() === day;
+
+                if (match) {
+                    const isAllClear = match.fin.unclearCount === 0 && (match.evt.expenses || []).length > 0;
+                    cellsHtml += `
+                        <div onclick="selectCalendarDay(${day})" class="flex flex-col items-center justify-center cursor-pointer group">
+                            <div class="w-10 h-10 rounded-2xl bg-[#9ca3af] text-black font-extrabold text-sm flex items-center justify-center shadow ${isSelected ? 'ring-2 ring-fold-blue' : ''}">
+                                ${match.evt.iconLetter || match.evt.name.charAt(0)}
+                            </div>
+                            <span class="w-2 h-2 rounded-full -mt-1 border border-black ${isAllClear ? 'bg-fold-green' : 'bg-white'}"></span>
+                        </div>
+                    `;
+                } else {
+                    cellsHtml += `
+                        <div onclick="selectCalendarDay(${day})" class="h-10 flex items-center justify-center cursor-pointer">
+                            <span class="w-9 h-9 rounded-xl flex items-center justify-center text-[15px] font-semibold ${
+                                isToday || isSelected
+                                    ? 'border border-[#8b8e96] text-white'
+                                    : 'text-[#e5e7eb] hover:bg-[#191b20]'
+                            }">${day}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            document.getElementById("calendarGridContainer").innerHTML = cellsHtml;
+
+            ["ALL", "UNCLEAR", "CLEARED"].forEach(seg => {
+                const btn = document.getElementById(`calSeg_${seg}`);
+                if (!btn) return;
+                btn.className = state.calFilter === seg
+                    ? "py-2 rounded-xl bg-[#0e1014] text-fold-blueText shadow"
+                    : "py-2 rounded-xl text-[#8b8e96] hover:text-white";
+            });
+
+            let drawerEvents = [...state.events];
+            if (state.selectedCalDay && dayEventMap[state.selectedCalDay]) {
+                drawerEvents = [dayEventMap[state.selectedCalDay].evt];
+            } else if (state.calFilter === "UNCLEAR") {
+                drawerEvents = drawerEvents.filter(e => computeEventFinancials(e).unclearCount > 0);
+            } else if (state.calFilter === "CLEARED") {
+                drawerEvents = drawerEvents.filter(e => computeEventFinancials(e).unclearCount === 0 && (e.expenses || []).length > 0);
+            }
+
+            const drawerEl = document.getElementById("calendarEventsDrawerList");
+            if (drawerEvents.length === 0) {
+                drawerEl.innerHTML = `<div class="p-4 text-center text-xs text-[#787b84]">No events on this calendar filter.</div>`;
+            } else {
+                drawerEl.innerHTML = drawerEvents.map(evt => {
+                    const fin = computeEventFinancials(evt);
+                    const statusLabel = fin.unclearCount === 0 && (evt.expenses || []).length > 0
+                        ? "All expenses cleared"
+                        : `${fin.unclearCount} unsettled splits`;
+
+                    return `
+                        <div onclick="selectActiveEvent('${evt.id}')" class="p-3.5 rounded-2xl bg-[#090a0c] border border-[#1d1f24] hover:border-fold-blue/50 flex items-center justify-between gap-3 cursor-pointer transition">
+                            <div class="flex items-center gap-3.5 min-w-0">
+                                <div class="w-11 h-11 rounded-2xl bg-[#8b8e96] text-black font-extrabold text-lg flex items-center justify-center shrink-0">
+                                    ${evt.iconLetter || evt.name.charAt(0)}
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="text-[16px] font-bold text-white truncate">${evt.name}</div>
+                                    <div class="text-[13px] text-[#8b8e96] tabular-nums mt-0.5">
+                                        <span class="text-white font-semibold">₹${fin.totalSpend.toLocaleString("en-IN")}</span> • ${statusLabel}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="cal-badge">
+                                <div class="cal-badge-top"></div>
+                                <div class="text-[15px] font-extrabold text-black leading-tight mt-0.5">${evt.dayNum}</div>
+                                <div class="text-[9px] font-bold text-[#4b5563] uppercase">${evt.monthShort || monthShortNames[mo]}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+        }
+
+        window.changeCalendarMonth = function(delta) {
+            let m = state.calMonth + delta;
+            let y = state.calYear;
+            if (m < 0) { m = 11; y--; }
+            if (m > 11) { m = 0; y++; }
+            state.calMonth = m;
+            state.calYear = y;
+            state.selectedCalDay = null;
+            renderCalendarTab();
+        };
+
+        // -------------------------------------------------------------------
+        // 5. RENDER PERSONAL PROFILE OVERLAY (Fold 6 UI — Only User's Own Profile)
+        // -------------------------------------------------------------------
+        function renderProfileOverlayData() {
+            const me = state.userProfile;
+            if (!me) return;
+            const totals = computePersonalAllTimeTotals();
+
+            document.getElementById("profileOverlayAvatarImg").src = me.pfp || DEFAULT_MONOLITH_PFP;
+            document.getElementById("profileOverlayDeviceBadge").textContent = me.deviceName.toUpperCase();
+            document.getElementById("profileOverlayUpiPill").textContent = me.upi ? `@${me.upi}` : "@add_upi_id";
+            document.getElementById("profileOverlayNameSub").textContent = me.name.toUpperCase();
+
+            document.getElementById("profileNameInput").value = me.name;
+            document.getElementById("profileUpiInput").value = me.upi || "";
+            document.getElementById("profileReadOnlyDeviceName").textContent = me.deviceName;
+            document.getElementById("profileReadOnlyDeviceId").textContent = `ID: ${me.deviceId}`;
+
+            document.getElementById("profileAllTimeSpent").textContent = `₹${totals.spent.toLocaleString("en-IN")}`;
+            document.getElementById("profileAllTimeGotBack").textContent = `₹${totals.gotBack.toLocaleString("en-IN")}`;
+        }
+
+        window.savePersonalProfileChanges = async function() {
+            const me = state.userProfile;
+            if (!me) return;
+            const oldName = me.name;
+            const newNameRaw = (document.getElementById("profileNameInput").value || "").trim();
+            const newUpiRaw = (document.getElementById("profileUpiInput").value || "").trim();
+
+            if (!newNameRaw) {
+                showToast("Name cannot be empty", "error");
+                return;
+            }
+
+            const newName = newNameRaw.charAt(0).toUpperCase() + newNameRaw.slice(1);
+            me.name = newName;
+            me.upi = newUpiRaw;
+
+            // Update references in user's events if name or UPI changed
+            state.events.forEach(evt => {
+                const idx = evt.members.indexOf(oldName);
+                if (idx !== -1) evt.members[idx] = newName;
+                if (evt.memberProfiles) {
+                    delete evt.memberProfiles[oldName];
+                    evt.memberProfiles[newName] = {
+                        name: newName,
+                        upi: me.upi,
+                        pfp: me.pfp,
+                        deviceName: me.deviceName,
+                        deviceId: me.deviceId
+                    };
+                }
+            });
+
+            await ApiService.saveProfile(me);
+            renderAll();
+            showToast("Personal profile & UPI ID saved");
+        };
+
+        // ===================================================================
+        // NAVIGATION & TAB HANDLERS
+        // ===================================================================
+        window.switchBottomTab = function(tabName) {
+            currentTab = tabName;
+            ["HOME", "TRANSACTIONS", "EVENTS", "CALENDAR"].forEach(t => {
+                const view = document.getElementById(`tabView_${t}`);
+                const btn = document.getElementById(`navBtn_${t}`);
+                if (t === tabName) {
+                    view.classList.remove("hidden");
+                    btn.className = "py-2.5 flex items-center justify-center fold-dock-active text-white transition";
+                } else {
+                    view.classList.add("hidden");
+                    btn.className = "py-2.5 flex items-center justify-center text-[#8b8e96] hover:text-white transition";
+                }
+            });
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            renderAll();
+        };
+
+        window.openProfileOverlay = function() {
+            renderProfileOverlayData();
+            document.getElementById("profileOverlay").classList.remove("hidden");
+        };
+
+        window.closeProfileOverlay = function() {
+            document.getElementById("profileOverlay").classList.add("hidden");
+        };
+
+        window.focusUpiEditInput = function() {
+            const inp = document.getElementById("profileUpiInput");
+            if (inp) inp.focus();
+        };
+
+        window.setHomeFilter = function(f) {
+            state.homeFilter = f;
+            renderHomeTab();
+        };
+
+        window.setTxSubTab = function(sub) {
+            state.txSubTab = sub;
+            renderTransactionsTab();
+        };
+
+        window.cycleTxFilter = function() {
+            const order = ["ALL", "UNCLEAR", "CLEARED"];
+            const next = order[(order.indexOf(state.txSubTab) + 1) % order.length];
+            setTxSubTab(next);
+            showToast(`Filter: ${next}`);
+        };
+
+        window.toggleExpenseCleared = async function(evtId, expId) {
+            const evt = state.events.find(e => e.id === evtId);
+            if (!evt) return;
+            const exp = (evt.expenses || []).find(x => x.id === expId);
+            if (!exp) return;
+            exp.cleared = !exp.cleared;
+            await ApiService.toggleExpenseCleared(evtId, expId, exp.cleared);
+            renderAll();
+            showToast(`Marked "${exp.title}" as ${exp.cleared ? 'Cleared ✓' : 'Unclear ⏳'}`);
+        };
+
+        window.deleteExpenseFromEvent = async function(evtId, expId) {
+            const evt = state.events.find(e => e.id === evtId);
+            if (!evt) return;
+            evt.expenses = (evt.expenses || []).filter(x => x.id !== expId);
+            await ApiService.deleteExpense(evtId, expId);
+            renderAll();
+            showToast("Expense removed");
+        };
+
+        window.selectActiveEvent = function(evtId) {
+            state.activeEventId = evtId;
+            state.selectedCalDay = null;
+            state.selectedCategoryFilter = null;
+            saveLocalState();
+            switchBottomTab("HOME");
+            const evt = getActiveEvent();
+            if (evt) showToast(`Switched to ${evt.name}`);
+        };
+
+        window.selectCalendarDay = function(day) {
+            state.selectedCalDay = state.selectedCalDay === day ? null : day;
+            renderCalendarTab();
+        };
+
+        window.setCalFilter = function(f) {
+            state.calFilter = f;
+            state.selectedCalDay = null;
+            renderCalendarTab();
+        };
+
+        // ===================================================================
+        // ADD EXPENSE MODAL (With Categories + Custom Categories & Silent Stamp)
+        // ===================================================================
+        window.openAddExpenseModal = function() {
+            const evt = getActiveEvent();
+            if (!evt) {
+                openCreateEventModal();
+                showToast("Create an event first before adding expenses");
+                return;
+            }
+
+            modalPayMode = "UPI";
+            modalSelectedCategory = state.categories[0] || "Food & Drinks";
+            modalParticipants = new Set(evt.members);
+
+            document.getElementById("expTitleInput").value = "";
+            document.getElementById("expAmountInput").value = "";
+            document.getElementById("customCategoryCreatorBox").classList.add("hidden");
+
+            const payerSel = document.getElementById("expPaidBySelect");
+            payerSel.innerHTML = evt.members.map(m =>
+                `<option value="${m}" ${m === state.userProfile.name ? 'selected' : ''}>${m}</option>`
+            ).join("");
+
+            setModalPayMode("UPI");
+            renderModalCategoryChips();
+            renderModalParticipantPills();
+            updateSplitMathPreview();
+
+            document.getElementById("addExpenseModal").classList.remove("hidden");
+        };
+
+        window.closeAddExpenseModal = function() {
+            document.getElementById("addExpenseModal").classList.add("hidden");
+        };
+
+        function renderModalCategoryChips() {
+            const container = document.getElementById("expCategoryChipsContainer");
+            container.innerHTML = state.categories.map(cat => {
+                const active = modalSelectedCategory === cat;
+                return `
+                    <button type="button" onclick="selectExpenseCategory('${cat.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                        active
+                            ? 'bg-fold-blue text-black border-fold-blue font-bold'
+                            : 'bg-black border-[#262930] text-[#d1d5db] hover:border-white/40'
+                    }">
+                        ${cat}
+                    </button>
+                `;
+            }).join("");
+        }
+
+        window.selectExpenseCategory = function(cat) {
+            modalSelectedCategory = cat;
+            renderModalCategoryChips();
+        };
+
+        window.toggleCustomCategoryBox = function() {
+            const box = document.getElementById("customCategoryCreatorBox");
+            box.classList.toggle("hidden");
+            if (!box.classList.contains("hidden")) {
+                document.getElementById("newCustomCategoryInput").focus();
+            }
+        };
+
+        window.saveNewCustomCategory = async function() {
+            const inp = document.getElementById("newCustomCategoryInput");
+            const val = (inp.value || "").trim();
+            if (!val) return;
+
+            if (!state.categories.includes(val)) {
+                state.categories.push(val);
+                await ApiService.addCustomCategory(val);
+            }
+            modalSelectedCategory = val;
+            inp.value = "";
+            document.getElementById("customCategoryCreatorBox").classList.add("hidden");
+            renderModalCategoryChips();
+            showToast(`Category "${val}" added`);
+        };
+
+        window.setModalPayMode = function(mode) {
+            modalPayMode = mode;
+            document.getElementById("expModeUPI").className = mode === "UPI"
+                ? "py-1.5 rounded-lg text-xs font-bold bg-fold-blue text-black"
+                : "py-1.5 rounded-lg text-xs font-bold text-[#8b8e96]";
+            document.getElementById("expModeCash").className = mode === "Cash"
+                ? "py-1.5 rounded-lg text-xs font-bold bg-fold-green text-black"
+                : "py-1.5 rounded-lg text-xs font-bold text-[#8b8e96]";
+        };
+
+        function renderModalParticipantPills() {
+            const evt = getActiveEvent();
+            if (!evt) return;
+            const container = document.getElementById("expParticipantsPills");
+            container.innerHTML = evt.members.map(m => {
+                const isOn = modalParticipants.has(m);
+                return `
+                    <button type="button" onclick="toggleModalParticipant('${m}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                        isOn
+                            ? 'bg-fold-navyPill border-fold-blue text-white'
+                            : 'bg-black border-[#262930] text-[#686b73]'
+                    }">
+                        ${isOn ? '✓ ' : ''}${m}
+                    </button>
+                `;
+            }).join("");
+            updateSplitMathPreview();
+        }
+
+        window.toggleModalParticipant = function(m) {
+            if (modalParticipants.has(m)) modalParticipants.delete(m);
+            else modalParticipants.add(m);
+            renderModalParticipantPills();
+        };
+
+        window.toggleAllModalParticipants = function(all) {
+            const evt = getActiveEvent();
+            if (!evt) return;
+            modalParticipants.clear();
+            if (all) evt.members.forEach(m => modalParticipants.add(m));
+            renderModalParticipantPills();
+        };
+
+        window.updateSplitMathPreview = function() {
+            const amount = Number(document.getElementById("expAmountInput")?.value) || 0;
+            const count = modalParticipants.size;
+            const splitEl = document.getElementById("expPerPersonSplitText");
+            if (count > 0 && amount > 0) {
+                splitEl.textContent = `Split among ${count} participant${count > 1 ? 's' : ''} → ₹${Math.round((amount / count) * 100) / 100} / person`;
+            } else if (count > 0) {
+                splitEl.textContent = `${count} participant${count > 1 ? 's' : ''} selected`;
+            } else {
+                splitEl.textContent = "Select at least 1 participant";
+            }
+        };
+
+        window.submitNewExpense = async function() {
+            const evt = getActiveEvent();
+            const me = state.userProfile;
+            if (!evt || !me) return;
+
+            const title = (document.getElementById("expTitleInput").value || "").trim() || modalSelectedCategory;
+            const amount = Number(document.getElementById("expAmountInput").value);
+            const paidBy = document.getElementById("expPaidBySelect").value;
+            const parts = evt.members.filter(m => modalParticipants.has(m));
+
+            if (!amount || amount <= 0) {
+                showToast("Enter a valid amount in ₹", "error");
+                return;
+            }
+            if (parts.length === 0) {
+                showToast("Select at least 1 participant", "error");
+                return;
+            }
+
+            const now = new Date();
+            const monthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const hours = now.getHours();
+            const mins = String(now.getMinutes()).padStart(2, "0");
+            const ampm = hours >= 12 ? "PM" : "AM";
+            const hr12 = hours % 12 || 12;
+
+            // Silent background attachment of creator & hardware device metadata for backend redundancy
+            const newExpense = {
+                id: "exp_" + Date.now(),
+                eventId: evt.id,
+                title,
+                category: modalSelectedCategory,
+                amount,
+                paidBy,
+                createdBy: me.name,
+                createdByUserId: me.id,
+                createdByPfp: me.pfp,
+                deviceUsed: DeviceIdentity.deviceName,
+                deviceId: DeviceIdentity.deviceId,
+                method: modalPayMode,
+                participants: parts,
+                timeStr: `${monthShortNames[now.getMonth()]} ${now.getDate()}, ${hr12}:${mins}${ampm}`,
+                createdAt: now.toISOString(),
+                cleared: false
+            };
+
+            evt.expenses.unshift(newExpense);
+            closeAddExpenseModal();
+            await ApiService.createExpense(evt.id, newExpense);
+            renderAll();
+            showToast(`Added "${title}" (₹${amount}) under ${modalSelectedCategory}`);
+        };
+
+        // ===================================================================
+        // DIRECT UPI REDIRECT PAYMENT WINDOW
+        // ===================================================================
+        window.openUpiRedirectModal = function(from, to, amount) {
+            const evt = getActiveEvent();
+            const recipient = getMemberDetails(to, evt);
+            const vpa = recipient.upi || `${to.toLowerCase().replace(/\s+/g, '')}@upi`;
+            pendingUpiTransfer = { from, to, amount, vpa };
+
+            document.getElementById("upiPayTitle").textContent = `${from} paying ${to}`;
+            document.getElementById("upiPayVpaBadge").textContent = vpa;
+            document.getElementById("upiPayAmountBig").textContent = `₹${amount}`;
+
+            const eventLabel = evt ? evt.name : "FoldSplit";
+            const upiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(to)}&am=${encodeURIComponent(amount)}&cu=INR&tn=${encodeURIComponent(eventLabel + ' Split')}`;
+            document.getElementById("upiDeepLinkAnchor").setAttribute("href", upiUri);
+
+            document.getElementById("upiRedirectModal").classList.remove("hidden");
+        };
+
+        window.closeUpiRedirectModal = function() {
+            document.getElementById("upiRedirectModal").classList.add("hidden");
+            pendingUpiTransfer = null;
+        };
+
+        window.handleUpiDeepLinkClick = function() {
+            if (!pendingUpiTransfer) return;
+            showToast(`Redirecting to UPI App for ${pendingUpiTransfer.vpa} (₹${pendingUpiTransfer.amount})...`);
+        };
+
+        window.launchSpecificUpiApp = function(appName) {
+            if (!pendingUpiTransfer) return;
+            const { to, amount, vpa } = pendingUpiTransfer;
+            const upiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(to)}&am=${encodeURIComponent(amount)}&cu=INR`;
+            window.location.href = upiUri;
+            showToast(`Opening ${appName} to pay ${to} ₹${amount}`);
+        };
+
+        window.confirmSettlementCleared = async function(method) {
+            if (!pendingUpiTransfer) return;
+            const evt = getActiveEvent();
+            if (!evt) return;
+            if (!evt.settledTransfers) evt.settledTransfers = [];
+
+            const settlementObj = {
+                id: "st_" + Date.now(),
+                from: pendingUpiTransfer.from,
+                to: pendingUpiTransfer.to,
+                amount: pendingUpiTransfer.amount,
+                method,
+                settledByDeviceId: DeviceIdentity.deviceId,
+                settledAt: new Date().toISOString()
+            };
+
+            evt.settledTransfers.push(settlementObj);
+            closeUpiRedirectModal();
+            await ApiService.recordSettlement(evt.id, settlementObj);
+            renderAll();
+            showToast(`${settlementObj.from} settled ₹${settlementObj.amount} with ${settlementObj.to} (${method})`);
+        };
+
+        // ===================================================================
+        // CREATE EVENT, SHARE LINK & MANAGE PARTICIPANTS MODAL
+        // ===================================================================
+        function createEventObject(title, dateISO, customCode = null) {
+            const me = state.userProfile;
+            const dt = dateISO ? new Date(dateISO + "T12:00:00") : new Date();
+            const monthShortNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+            const monthPretty = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+            const slug = customCode || (title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 14) + "-" + String(Math.floor(100 + Math.random() * 900)));
+
+            return {
+                id: "evt_" + Date.now(),
+                code: slug,
+                name: title,
+                dateISO: dt.toISOString().slice(0, 10),
+                dateStr: `${monthPretty[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
+                dayNum: dt.getDate(),
+                monthIndex: dt.getMonth(),
+                monthShort: monthShortNames[dt.getMonth()],
+                yearNum: dt.getFullYear(),
+                iconLetter: title.charAt(0).toUpperCase(),
+                createdByUserId: me.id,
+                members: [me.name],
+                memberProfiles: {
+                    [me.name]: {
+                        name: me.name,
+                        upi: me.upi,
+                        pfp: me.pfp,
+                        deviceName: me.deviceName,
+                        deviceId: me.deviceId
+                    }
+                },
+                settledTransfers: [],
+                expenses: []
+            };
+        }
+
+        window.openShareAndPeopleModal = function() {
+            const evt = getActiveEvent();
+            const todayISO = new Date().toISOString().slice(0, 10);
+            document.getElementById("newEventDateInput").value = todayISO;
+
+            const activeSec = document.getElementById("activeEventShareSection");
+            if (!evt) {
+                document.getElementById("shareModalHeader").textContent = "Create Your First Event";
+                activeSec.classList.add("hidden");
+            } else {
+                document.getElementById("shareModalHeader").textContent = `${evt.name} — Link & People`;
+                activeSec.classList.remove("hidden");
+                document.getElementById("modalShareUrlInput").value = `${window.location.origin}${window.location.pathname}?event=${evt.code}`;
+
+                const listEl = document.getElementById("modalPeopleList");
+                listEl.innerHTML = evt.members.map(m => {
+                    const info = getMemberDetails(m, evt);
+                    return `
+                        <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-black border border-[#22242a] text-xs">
+                            <div class="flex items-center gap-2.5">
+                                <img src="${info.pfp}" class="w-6 h-6 rounded-full object-cover">
+                                <span class="font-bold text-white">${m}</span>
+                                ${info.upi ? `<span class="text-[#787b84] font-mono">${info.upi}</span>` : ''}
+                            </div>
+                            <span class="text-[#8b8e96] font-mono text-[10px]">${info.deviceName}</span>
+                        </div>
+                    `;
+                }).join("");
+            }
+
+            document.getElementById("shareAndPeopleModal").classList.remove("hidden");
+        };
+
+        window.openCreateEventModal = function() {
+            openShareAndPeopleModal();
+            setTimeout(() => document.getElementById("newEventTitleInput")?.focus(), 100);
+        };
+
+        window.closeShareAndPeopleModal = function() {
+            document.getElementById("shareAndPeopleModal").classList.add("hidden");
+        };
+
+        window.createNewEventFromModal = async function() {
+            const title = (document.getElementById("newEventTitleInput").value || "").trim();
+            const dateISO = document.getElementById("newEventDateInput").value;
+            if (!title) {
+                showToast("Enter a name for the event", "error");
+                return;
+            }
+
+            const newEvt = createEventObject(title, dateISO);
+            state.events.unshift(newEvt);
+            state.activeEventId = newEvt.id;
+            state.calYear = newEvt.yearNum;
+            state.calMonth = newEvt.monthIndex;
+
+            document.getElementById("newEventTitleInput").value = "";
+            await ApiService.createEvent(newEvt);
+            renderAll();
+            openShareAndPeopleModal(); // Keep modal open so they can immediately add friends or copy the link
+            showToast(`Event "${title}" created! Add friends or copy link.`);
+        };
+
+        window.addNewPersonToEvent = async function() {
+            const evt = getActiveEvent();
+            if (!evt) return;
+            const nameRaw = (document.getElementById("newPersonNameInput").value || "").trim();
+            const upiRaw = (document.getElementById("newPersonUpiInput").value || "").trim();
+
+            if (!nameRaw) {
+                showToast("Enter your friend's name", "error");
+                return;
+            }
+            const name = nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1);
+            if (!evt.members.includes(name)) {
+                evt.members.push(name);
+            }
+            if (!evt.memberProfiles) evt.memberProfiles = {};
+            evt.memberProfiles[name] = {
+                name,
+                upi: upiRaw,
+                pfp: generateInitialsAvatar(name),
+                deviceName: "Invited via Link"
+            };
+
+            document.getElementById("newPersonNameInput").value = "";
+            document.getElementById("newPersonUpiInput").value = "";
+
+            await ApiService.addParticipant(evt.id, evt.memberProfiles[name]);
+            renderAll();
+            openShareAndPeopleModal();
+            showToast(`Added ${name} to ${evt.name}`);
+        };
+
+        window.copyEventShareLink = function() {
+            const evt = getActiveEvent();
+            if (!evt) {
+                openCreateEventModal();
+                showToast("Create an event first to get a shareable link");
+                return;
+            }
+            const url = `${window.location.origin}${window.location.pathname}?event=${evt.code}`;
+            const temp = document.createElement("textarea");
+            temp.value = url;
+            temp.style.position = "fixed";
+            temp.style.left = "-9999px";
+            document.body.appendChild(temp);
+            temp.select();
+            try {
+                document.execCommand("copy");
+                showToast(`Invite link copied for ${evt.name}`);
+            } catch (e) {
+                showToast("Share link ready");
+            }
+            document.body.removeChild(temp);
+        };
+
+        function showToast(msg, type = "info") {
+            const container = document.getElementById("toastContainer");
+            if (!container) return;
+            const el = document.createElement("div");
+            el.className = `px-4 py-3 rounded-2xl bg-[#181a20] border ${
+                type === "error" ? "border-fold-red text-fold-red" : "border-[#2e323d] text-white"
+            } shadow-2xl text-xs font-semibold flex items-center gap-2 animate-fade`;
+            el.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check text-fold-blueText'}"></i><span>${msg}</span>`;
+            container.appendChild(el);
+            setTimeout(() => {
+                el.style.opacity = "0";
+                setTimeout(() => el.remove(), 200);
+            }, 2800);
+        }
+
+        window.onload = async function() {
+            await DeviceIdentity.init();
+            checkOnboardingStatus();
+            renderAll();
+        };
+    </script>
+</body>
+</html>
