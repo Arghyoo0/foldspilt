@@ -1256,13 +1256,12 @@
     <!-- ===================================================================
          BACKEND SPECIFICATION & PRODUCTION APPLICATION LOGIC
     ==================================================================== -->
-    <script>
+   <script>
         const CONFIG = {
             API_BASE_URL: window.location.origin,
-            STORAGE_KEY: "foldsplit_prod_v2",
-            USERS_DB_KEY: "foldsplit_users_db_v1",
-            EVENTS_DB_KEY: "foldsplit_events_db_v1",
-            SESSION_KEY: "foldsplit_active_session_v1"
+            STORAGE_KEY: "foldsplit_prod_v3",
+            SESSION_KEY: "foldsplit_active_session_v3",
+            PENDING_INVITE_KEY: "foldsplit_pending_invite_code"
         };
 
         const DEFAULT_CATEGORIES = [
@@ -1288,7 +1287,7 @@
         function getPersonColor(name, evt) {
             const clean = (name || "User").trim();
             if (evt && Array.isArray(evt.members)) {
-                const idx = evt.members.indexOf(clean);
+                const idx = evt.members.findIndex(m => m.toLowerCase() === clean.toLowerCase());
                 if (idx !== -1) return PERSON_COLORS[idx % PERSON_COLORS.length];
             }
             let hash = 0;
@@ -1439,8 +1438,8 @@
                     });
                     return await res.json();
                 } catch (err) {
-                    console.warn(`[ApiService] Network fallback for ${method} ${endpoint}:`, err);
-                    return { ok: false, offlineFallback: true };
+                    console.warn(`[ApiService] Network error for ${method} ${endpoint}:`, err);
+                    return { ok: false };
                 }
             },
 
@@ -1450,20 +1449,20 @@
             async createEvent(eventObj) {
                 return this.request("/api/events", "POST", eventObj);
             },
-            async addParticipant(eventId, participantObj) {
-                return this.request(`/api/events/${eventId}/join`, "POST", participantObj);
+            async addParticipant(eventIdOrCode, participantObj) {
+                return this.request(`/api/events/${encodeURIComponent(eventIdOrCode)}/join`, "POST", participantObj);
             },
             async createExpense(eventId, expenseObj) {
-                return this.request(`/api/events/${eventId}/expenses`, "POST", expenseObj);
+                return this.request(`/api/events/${encodeURIComponent(eventId)}/expenses`, "POST", expenseObj);
             },
             async toggleExpenseCleared(eventId, expenseId, cleared) {
-                return this.request(`/api/events/${eventId}/expenses/${expenseId}`, "PATCH", { cleared });
+                return this.request(`/api/events/${encodeURIComponent(eventId)}/expenses/${encodeURIComponent(expenseId)}`, "PATCH", { cleared });
             },
             async deleteExpense(eventId, expenseId) {
-                return this.request(`/api/events/${eventId}/expenses/${expenseId}`, "DELETE");
+                return this.request(`/api/events/${encodeURIComponent(eventId)}/expenses/${encodeURIComponent(expenseId)}`, "DELETE");
             },
             async recordSettlement(eventId, settlementObj) {
-                return this.request(`/api/events/${eventId}/settlements`, "POST", settlementObj);
+                return this.request(`/api/events/${encodeURIComponent(eventId)}/settlements`, "POST", settlementObj);
             },
             async addCustomCategory(categoryName) {
                 return this.request("/api/categories", "POST", { name: categoryName });
@@ -1502,12 +1501,11 @@
                 if (raw) Object.assign(base, JSON.parse(raw));
                 const sess = localStorage.getItem(CONFIG.SESSION_KEY);
                 if (sess) {
-                    const parsedSess = JSON.parse(sess);
-                    base.userProfile = parsedSess;
+                    base.userProfile = JSON.parse(sess);
+                } else {
+                    base.userProfile = null;
                 }
-            } catch (e) {
-                console.warn("Could not read localStorage:", e);
-            }
+            } catch (e) {}
             return base;
         }
 
@@ -1517,26 +1515,25 @@
                     localStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify(state.userProfile));
                 }
                 localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state));
-            } catch (e) {
-                console.warn("Could not save state:", e);
-            }
+            } catch (e) {}
+        }
+
+        function getVisibleEventsForCurrentUser() {
+            if (!state.events) return [];
+            if (!state.userProfile) return [];
+            const myName = (state.userProfile.name || "").toLowerCase();
+            const myId = state.userProfile.id;
+            return state.events.filter(e => {
+                const inMembers = Array.isArray(e.members) && e.members.some(m => (m || "").toLowerCase() === myName);
+                const isCreator = e.createdByUserId === myId || (e.createdByName || "").toLowerCase() === myName;
+                return inMembers || isCreator;
+            });
         }
 
         function getActiveEvent() {
             const myEvents = getVisibleEventsForCurrentUser();
             if (myEvents.length === 0) return null;
             return myEvents.find(e => e.id === state.activeEventId) || myEvents[0];
-        }
-
-        function getVisibleEventsForCurrentUser() {
-            if (!state.events) return [];
-            if (!state.userProfile) return state.events;
-            const me = state.userProfile.name;
-            return state.events.filter(e =>
-                (e.members && e.members.includes(me)) ||
-                e.createdByUserId === state.userProfile.id ||
-                e.createdByName === me
-            );
         }
 
         function getMemberDetails(memberName, evt) {
@@ -1549,14 +1546,17 @@
                 };
             }
             const targetEvt = evt || getActiveEvent();
-            if (targetEvt && targetEvt.memberProfiles && targetEvt.memberProfiles[memberName]) {
-                const mp = targetEvt.memberProfiles[memberName];
-                return {
-                    name: memberName,
-                    upi: mp.upi || "",
-                    pfp: mp.pfp || generateInitialsAvatar(memberName),
-                    deviceName: mp.deviceName || "Member Device"
-                };
+            if (targetEvt && targetEvt.memberProfiles) {
+                const matchKey = Object.keys(targetEvt.memberProfiles).find(k => k.toLowerCase() === (memberName || "").toLowerCase());
+                if (matchKey && targetEvt.memberProfiles[matchKey]) {
+                    const mp = targetEvt.memberProfiles[matchKey];
+                    return {
+                        name: memberName,
+                        upi: mp.upi || "",
+                        pfp: mp.pfp || generateInitialsAvatar(memberName),
+                        deviceName: mp.deviceName || "Member Device"
+                    };
+                }
             }
             return {
                 name: memberName,
@@ -1566,6 +1566,55 @@
             };
         }
 
+        // ===================================================================
+        // INVITE URL CAPTURE & PARSING (Supports /eventname-hash, /e/code, ?event=code)
+        // ===================================================================
+        function extractEventCodeFromString(str) {
+            if (!str) return null;
+            const trimmed = str.trim();
+            try {
+                if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                    const urlObj = new URL(trimmed);
+                    const qEvt = urlObj.searchParams.get("event") || urlObj.searchParams.get("e");
+                    if (qEvt) return qEvt.trim();
+                    const parts = urlObj.pathname.split("/").filter(Boolean);
+                    if (parts[0] === "e" && parts[1]) return parts[1].trim();
+                    if (parts[0] && !parts[0].includes(".")) return parts[0].trim();
+                }
+            } catch (e) {}
+
+            if (trimmed.includes("?event=")) {
+                return trimmed.split("?event=")[1].split("&")[0].trim();
+            }
+            const clean = trimmed.replace(/^\/+|\/+$/g, "").replace(/^e\//i, "");
+            if (/^[a-z0-9_-]{3,40}$/i.test(clean) && clean.toLowerCase() !== "index.html") {
+                return clean;
+            }
+            return null;
+        }
+
+        function captureUrlInviteOnBoot() {
+            const params = new URLSearchParams(window.location.search);
+            let code = params.get("event") || params.get("e");
+
+            if (!code) {
+                const parts = window.location.pathname.split("/").filter(Boolean);
+                if (parts[0] === "e" && parts[1]) {
+                    code = parts[1];
+                } else if (parts[0] && !parts[0].includes(".") && parts[0] !== "api") {
+                    code = parts[0];
+                }
+            }
+
+            if (code) {
+                sessionStorage.setItem(CONFIG.PENDING_INVITE_KEY, code.trim());
+                window.history.replaceState({}, document.title, "/");
+            }
+        }
+
+        // ===================================================================
+        // PFP UPLOAD
+        // ===================================================================
         window.triggerPfpUpload = function() {
             const fileInput = document.getElementById("globalPfpFileInput");
             if (fileInput) {
@@ -1611,24 +1660,9 @@
             reader.readAsDataURL(file);
         };
 
-        function parseInviteFromUrlOrString(rawInput) {
-            if (typeof rawInput === "string" && rawInput.trim() !== "") {
-                const s = rawInput.trim();
-                const m = s.match(/\/e\/([a-z0-9_-]+)/i) || s.match(/[?&]event=([a-z0-9_-]+)/i);
-                if (m) return { code: m[1] };
-                if (/^[a-z0-9_-]+$/i.test(s)) return { code: s };
-            }
-            const path = window.location.pathname;
-            if (path.startsWith("/e/")) {
-                const code = path.replace("/e/", "").split("/")[0].trim();
-                if (code) return { code };
-            }
-            const params = new URLSearchParams(window.location.search);
-            if (params.get("event")) return { code: params.get("event") };
-            if (params.get("e")) return { code: params.get("e") };
-            return null;
-        }
-
+        // ===================================================================
+        // AUTHENTICATION (USERNAME + 4-DIGIT PIN ON SERVER)
+        // ===================================================================
         window.switchAuthMode = function(mode) {
             const loginView = document.getElementById("authView_LOGIN");
             const signupView = document.getElementById("authView_SIGNUP");
@@ -1652,6 +1686,13 @@
             document.getElementById("onboardingPfpPreview").src = onboardingTempPfp;
             document.getElementById("onboardingDetectedDeviceName").textContent = DeviceIdentity.deviceName;
             document.getElementById("onboardingDetectedDeviceId").textContent = DeviceIdentity.deviceId;
+
+            const savedInviteCode = sessionStorage.getItem(CONFIG.PENDING_INVITE_KEY);
+            if (savedInviteCode) {
+                document.getElementById("onboardingInviteBanner").classList.remove("hidden");
+                document.getElementById("onboardingInviteTitleText").textContent = `Invite Code: ${savedInviteCode}`;
+                document.getElementById("onboardingInviteCodeText").textContent = `Log in or create account to swipe & join`;
+            }
 
             if (!state.userProfile) {
                 document.getElementById("authScreen").classList.remove("hidden");
@@ -1689,6 +1730,7 @@
                 document.getElementById("authScreen").classList.add("hidden");
 
                 await syncEventsWithServer();
+                await checkPendingInviteStatus();
                 renderAll();
                 showToast(`Welcome back, ${data.user.name}!`);
             } catch (err) {
@@ -1734,6 +1776,7 @@
                 document.getElementById("authScreen").classList.add("hidden");
 
                 await syncEventsWithServer();
+                await checkPendingInviteStatus();
                 renderAll();
                 showToast(`Account @${rawUsername} created!`);
             } catch (err) {
@@ -1751,34 +1794,74 @@
             showToast("Logged out safely");
         };
 
-        function checkAndShowSwipeJoinOverlay(inviteObj) {
-            if (!inviteObj || !inviteObj.code || !state.userProfile) return;
+        // ===================================================================
+        // SWIPE-TO-APPROVE INVITE FLOW
+        // ===================================================================
+        async function checkPendingInviteStatus() {
+            if (!state.userProfile) return;
+            // Don't re-open if overlay is already visible
+            const overlay = document.getElementById("swipeJoinOverlay");
+            if (overlay && !overlay.classList.contains("hidden")) return;
+
+            const pendingCode = sessionStorage.getItem(CONFIG.PENDING_INVITE_KEY);
+            if (!pendingCode) return;
+
+            await promptJoinByCode(pendingCode, false);
+        }
+
+        async function promptJoinByCode(code, forcePreview = false) {
+            if (!code || !state.userProfile) return;
             const me = state.userProfile;
 
-            const existingEvt = state.events.find(e => e.code.toLowerCase() === inviteObj.code.toLowerCase());
-            if (existingEvt && existingEvt.members.includes(me.name)) {
-                state.activeEventId = existingEvt.id;
+            // 1. Check in already synced events list first
+            let targetEvt = (state.events || []).find(e => (e.code || "").toLowerCase() === code.toLowerCase());
+
+            // 2. If not in local list yet, fetch from server
+            if (!targetEvt) {
+                try {
+                    const res = await fetch(`${CONFIG.API_BASE_URL}/api/events/by-code/${encodeURIComponent(code)}`);
+                    const data = await res.json();
+                    if (data.ok && data.event) {
+                        targetEvt = data.event;
+                    }
+                } catch (e) {}
+            }
+
+            if (!targetEvt) {
+                sessionStorage.removeItem(CONFIG.PENDING_INVITE_KEY);
+                showToast("Invite event code not found", "error");
+                return;
+            }
+
+            const alreadyMember = Array.isArray(targetEvt.members) &&
+                targetEvt.members.some(m => (m || "").toLowerCase() === me.name.toLowerCase());
+
+            // If user already joined this event, switch to it silently and do NOT show the approval screen again
+            if (alreadyMember && !forcePreview) {
+                sessionStorage.removeItem(CONFIG.PENDING_INVITE_KEY);
+                state.activeEventId = targetEvt.id;
+                saveLocalState();
                 renderAll();
                 return;
             }
 
-            const eventTitle = inviteObj.title || (existingEvt ? existingEvt.name : "Shared Event");
-            const creatorName = inviteObj.by || (existingEvt ? existingEvt.createdByName : "Friend");
-            const createdWhen = inviteObj.at || (existingEvt ? existingEvt.createdAtFormatted : "Today");
+            const eventTitle = targetEvt.name || "Shared Event";
+            const creatorName = targetEvt.createdByName || (targetEvt.members && targetEvt.members[0]) || "Organizer";
+            const createdWhen = targetEvt.createdAtFormatted || targetEvt.dateStr || "Recently";
+            const creatorInfo = getMemberDetails(creatorName, targetEvt);
 
             document.getElementById("swipeJoinEventIcon").textContent = eventTitle.charAt(0).toUpperCase();
             document.getElementById("swipeJoinEventName").textContent = eventTitle;
             document.getElementById("swipeJoinCreatorName").textContent = creatorName;
-            document.getElementById("swipeJoinCreatorPfp").src = generateInitialsAvatar(creatorName);
+            document.getElementById("swipeJoinCreatorPfp").src = creatorInfo.pfp;
             document.getElementById("swipeJoinCreatedWhen").textContent = createdWhen;
             document.getElementById("swipeJoinUserBadge").textContent = `${me.name} (@${me.username})`;
             document.getElementById("swipeJoinDeviceBadge").textContent = me.deviceName;
 
             pendingInvitePayload = {
-                code: inviteObj.code,
-                title: eventTitle,
-                by: creatorName,
-                at: createdWhen
+                id: targetEvt.id,
+                code: targetEvt.code,
+                title: eventTitle
             };
 
             resetSwipeSliderPosition();
@@ -1789,45 +1872,22 @@
             const evt = getActiveEvent();
             if (!evt) return;
             closeShareAndPeopleModal();
-            checkAndShowSwipeJoinOverlay({
-                code: evt.code,
-                title: evt.name,
-                by: evt.createdByName || evt.members[0] || state.userProfile.name,
-                at: evt.createdAtFormatted || evt.dateStr
-            });
+            promptJoinByCode(evt.code, true);
         };
 
         window.triggerJoinFromPastedLink = function() {
             const inp = document.getElementById("joinInviteLinkInput");
             const val = (inp.value || "").trim();
             if (!val) return showToast("Paste an invite link or code first", "error");
-            const parsed = parseInviteFromUrlOrString(val);
-            if (!parsed || !parsed.code) return showToast("Invalid event code", "error");
+            const code = extractEventCodeFromString(val);
+            if (!code) return showToast("Invalid event link or code", "error");
             inp.value = "";
             closeShareAndPeopleModal();
-            fetchAndPromptJoinEvent(parsed.code);
+            promptJoinByCode(code, false);
         };
 
-        async function fetchAndPromptJoinEvent(code) {
-            try {
-                const res = await fetch(`${CONFIG.API_BASE_URL}/api/events/by-code/${code}`);
-                const data = await res.json();
-                if (data.ok && data.event) {
-                    checkAndShowSwipeJoinOverlay({
-                        code: data.event.code,
-                        title: data.event.name,
-                        by: data.event.createdByName || data.event.members[0],
-                        at: data.event.createdAtFormatted || data.event.dateStr
-                    });
-                } else {
-                    showToast("Event not found on server", "error");
-                }
-            } catch (e) {
-                showToast("Could not load event invite", "error");
-            }
-        }
-
         window.declineSwipeJoin = function() {
+            sessionStorage.removeItem(CONFIG.PENDING_INVITE_KEY);
             pendingInvitePayload = null;
             document.getElementById("swipeJoinOverlay").classList.add("hidden");
             showToast("Invite dismissed");
@@ -1836,20 +1896,11 @@
         async function approveJoinEvent() {
             if (!pendingInvitePayload || !state.userProfile) return;
             const me = state.userProfile;
-            const { code } = pendingInvitePayload;
+            const { id, code, title } = pendingInvitePayload;
 
-            let existingEvt = state.events.find(e => e.code.toLowerCase() === code.toLowerCase());
-            if (!existingEvt) {
-                await syncEventsWithServer();
-                existingEvt = state.events.find(e => e.code.toLowerCase() === code.toLowerCase());
-            }
+            sessionStorage.removeItem(CONFIG.PENDING_INVITE_KEY);
 
-            if (existingEvt) {
-                if (!existingEvt.members.includes(me.name)) existingEvt.members.push(me.name);
-                state.activeEventId = existingEvt.id;
-            }
-
-            const payload = {
+            const joinBody = {
                 name: me.name,
                 upi: me.upi,
                 pfp: me.pfp,
@@ -1857,13 +1908,21 @@
                 deviceId: me.deviceId
             };
 
-            await ApiService.addParticipant(code, payload);
+            await ApiService.addParticipant(code || id, joinBody);
             await syncEventsWithServer();
+
+            const joinedEvt = state.events.find(e =>
+                (e.code || "").toLowerCase() === (code || "").toLowerCase() || e.id === id
+            );
+            if (joinedEvt) {
+                state.activeEventId = joinedEvt.id;
+            }
 
             pendingInvitePayload = null;
             document.getElementById("swipeJoinOverlay").classList.add("hidden");
+            saveLocalState();
             renderAll();
-            showToast(`Approved & joined event!`);
+            showToast(`Joined "${title}"!`);
         }
 
         function initSwipeToApproveSlider() {
@@ -1900,12 +1959,12 @@
                 if (!isDragging) return;
                 isDragging = false;
                 const maxDrag = getMaxDrag();
-                if (currentX >= maxDrag * 0.82) {
+                if (currentX >= maxDrag * 0.80) {
                     currentX = maxDrag;
                     thumb.style.transform = `translateX(${maxDrag}px)`;
                     fill.style.width = "100%";
                     thumb.innerHTML = `<i class="fa-solid fa-check"></i>`;
-                    setTimeout(() => approveJoinEvent(), 180);
+                    setTimeout(() => approveJoinEvent(), 160);
                 } else {
                     resetSwipeSliderPosition();
                 }
@@ -1935,6 +1994,9 @@
             thumb.innerHTML = `<i class="fa-solid fa-arrow-right"></i>`;
         }
 
+        // ===================================================================
+        // FINANCIAL ENGINE
+        // ===================================================================
         function computeEventFinancials(evt) {
             if (!evt) {
                 return {
@@ -2057,6 +2119,9 @@
             };
         }
 
+        // ===================================================================
+        // RENDER ALL VIEWS
+        // ===================================================================
         function renderAll() {
             if (!state.userProfile) return;
             renderHomeTab();
@@ -2103,7 +2168,7 @@
 
             document.getElementById("homeTopEventName").textContent = evt.name;
             document.getElementById("homeTopPeopleCount").textContent = `(${evt.members.length})`;
-            document.getElementById("homeShareLinkText").textContent = `${evt.name} • ${evt.members.length} member${evt.members.length === 1 ? '' : 's'}`;
+            document.getElementById("homeShareLinkText").textContent = `/${evt.code} • ${evt.members.length} member${evt.members.length === 1 ? '' : 's'}`;
 
             const pendingCount = fin.transfers.length;
             document.getElementById("homeProfileSubtitle").textContent =
@@ -2612,7 +2677,7 @@
                             </div>
                             <div class="cal-badge">
                                 <div class="cal-badge-top"></div>
-                                <div class="text-[15px] font-extrabold text-black leading-tight mt-0.5">${evt.dayNum}</div>
+                                <div class="text-[15px] font-extrabold text-black leading-tight mt-0.5">${evt.dayNum || 1}</div>
                                 <div class="text-[9px] font-bold text-[#4b5563] uppercase">${evt.monthShort || monthShortNames[mo]}</div>
                             </div>
                         </div>
@@ -2722,8 +2787,9 @@
             const exp = (evt.expenses || []).find(x => x.id === expId);
             if (!exp) return;
             exp.cleared = !exp.cleared;
-            await ApiService.toggleExpenseCleared(evtId, expId, exp.cleared);
             renderAll();
+            await ApiService.toggleExpenseCleared(evtId, expId, exp.cleared);
+            await syncEventsWithServer();
             showToast(`Marked "${exp.title}" as ${exp.cleared ? 'Cleared ✓' : 'Unclear ⏳'}`);
         };
 
@@ -2731,8 +2797,9 @@
             const evt = state.events.find(e => e.id === evtId);
             if (!evt) return;
             evt.expenses = (evt.expenses || []).filter(x => x.id !== expId);
-            await ApiService.deleteExpense(evtId, expId);
             renderAll();
+            await ApiService.deleteExpense(evtId, expId);
+            await syncEventsWithServer();
             showToast("Expense removed");
         };
 
@@ -2774,7 +2841,7 @@
 
             const payerSel = document.getElementById("expPaidBySelect");
             payerSel.innerHTML = evt.members.map(m =>
-                `<option value="${m}" ${m === state.userProfile.name ? 'selected' : ''}>${m}</option>`
+                `<option value="${m}" ${m.toLowerCase() === state.userProfile.name.toLowerCase() ? 'selected' : ''}>${m}</option>`
             ).join("");
 
             setModalPayMode("UPI");
@@ -3018,8 +3085,9 @@
             showToast(`Settled ₹${settlementObj.amount} (${method})`);
         };
 
+        // Short encrypted-style link: https://foldspilt.onrender.com/dinner-9x4k
         function buildEventShareUrl(evt) {
-            return `${window.location.origin}/e/${evt.code}`;
+            return `${window.location.origin}/${evt.code}`;
         }
 
         function createEventObject(title, dateISO, customCode = null) {
@@ -3028,8 +3096,9 @@
             const monthShortNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             const monthPretty = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-            const token = Math.random().toString(36).substring(2, 8);
-            const slug = customCode || `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 10)}-${token}`;
+            const token = Math.random().toString(36).substring(2, 7);
+            const cleanBase = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 10) || "evt";
+            const slug = customCode || `${cleanBase}-${token}`;
 
             return {
                 id: "evt_" + Date.now(),
@@ -3072,7 +3141,7 @@
             } else {
                 document.getElementById("shareModalHeader").textContent = `${evt.name} — Link & People`;
                 activeSec.classList.remove("hidden");
-                document.getElementById("modalHiddenUrlEventTitle").textContent = `${evt.name}`;
+                document.getElementById("modalHiddenUrlEventTitle").textContent = `/${evt.code}`;
 
                 const listEl = document.getElementById("modalPeopleList");
                 listEl.innerHTML = evt.members.map(m => {
@@ -3119,7 +3188,7 @@
             openShareAndPeopleModal();
             await ApiService.createEvent(newEvt);
             await syncEventsWithServer();
-            showToast(`Event "${title}" created!`);
+            showToast(`Event "${title}" created! Share /${newEvt.code}`);
         };
 
         window.addNewPersonToEvent = async function() {
@@ -3130,13 +3199,15 @@
 
             if (!nameRaw) return showToast("Enter your friend's name", "error");
             const name = nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1);
-            if (!evt.members.includes(name)) evt.members.push(name);
+            if (!evt.members.some(m => m.toLowerCase() === name.toLowerCase())) {
+                evt.members.push(name);
+            }
             if (!evt.memberProfiles) evt.memberProfiles = {};
             evt.memberProfiles[name] = {
                 name,
                 upi: upiRaw,
                 pfp: generateInitialsAvatar(name),
-                deviceName: "Invited Member"
+                deviceName: "Added by Organizer"
             };
 
             document.getElementById("newPersonNameInput").value = "";
@@ -3157,7 +3228,7 @@
             }
             const url = buildEventShareUrl(evt);
             navigator.clipboard.writeText(url).then(() => {
-                showToast(`Copied short link for "${evt.name}"!`);
+                showToast(`Copied link: /${evt.code}`);
             }).catch(() => {
                 const temp = document.createElement("textarea");
                 temp.value = url;
@@ -3165,7 +3236,7 @@
                 temp.select();
                 document.execCommand("copy");
                 document.body.removeChild(temp);
-                showToast(`Copied short link for "${evt.name}"!`);
+                showToast(`Copied link: /${evt.code}`);
             });
         };
 
@@ -3195,34 +3266,22 @@
                     state.events = data.events;
                     saveLocalState();
                     renderAll();
-                    checkPendingInviteStatus();
                 }
             } catch (e) {}
         }
 
-        async function checkPendingInviteStatus() {
-            const invite = parseInviteFromUrlOrString();
-            if (!invite || !invite.code || !state.userProfile) return;
-
-            window.history.replaceState({}, document.title, window.location.origin);
-
-            const existing = state.events.find(e => e.code.toLowerCase() === invite.code.toLowerCase());
-            if (existing && existing.members.includes(state.userProfile.name)) {
-                state.activeEventId = existing.id;
-                renderAll();
-                return;
-            }
-
-            fetchAndPromptJoinEvent(invite.code);
-        }
-
         window.onload = async function() {
+            captureUrlInviteOnBoot();
             await DeviceIdentity.init();
             initSwipeToApproveSlider();
             checkOnboardingStatus();
             await syncEventsWithServer();
+            await checkPendingInviteStatus();
             renderAll();
-            setInterval(syncEventsWithServer, 3500);
+
+            setInterval(async () => {
+                await syncEventsWithServer();
+            }, 3500);
         };
     </script>
 </body>

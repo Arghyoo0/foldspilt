@@ -16,12 +16,12 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 600,
+  max: 800,
   message: { error: 'Too many requests, please try again later.' }
 }));
 
 // ==========================================
-// DATABASE MODELS
+// 1. DATABASE MODELS
 // ==========================================
 const User = mongoose.model('User', new mongoose.Schema({
   userId: { type: String, required: true, unique: true, index: true },
@@ -42,10 +42,15 @@ const Event = mongoose.model('Event', new mongoose.Schema({
   dateISO: { type: String, required: true },
   dateStr: { type: String, default: '' },
   createdAtFormatted: { type: String, default: '' },
+  dayNum: { type: Number, default: 1 },
+  monthIndex: { type: Number, default: 0 },
+  monthShort: { type: String, default: 'JAN' },
+  yearNum: { type: Number, default: 2026 },
+  iconLetter: { type: String, default: 'E' },
   createdByUserId: { type: String, required: true },
   createdByName: { type: String, default: '' },
   members: [{ type: String }],
-  memberProfiles: { type: Map, of: Object, default: {} },
+  memberProfiles: { type: mongoose.Schema.Types.Mixed, default: {} },
   settledTransfers: [{
     id: String,
     from: String,
@@ -78,7 +83,7 @@ const Expense = mongoose.model('Expense', new mongoose.Schema({
 }));
 
 // ==========================================
-// AUTH ROUTES (Database-Backed Login/Register)
+// 2. AUTH ROUTES (Username + 4-Digit PIN)
 // ==========================================
 app.post('/api/auth/register', async (req, res) => {
   try {
@@ -90,14 +95,14 @@ app.post('/api/auth/register', async (req, res) => {
     const clean = username.toLowerCase().trim();
     const existing = await User.findOne({ username: clean });
     if (existing) {
-      return res.status(409).json({ error: 'Username already taken.' });
+      return res.status(409).json({ error: 'Username already taken. Please log in.' });
     }
 
     const user = await User.create({
       userId: 'usr_' + clean + '_' + Date.now().toString(36),
       username: clean,
       pin,
-      name,
+      name: name.trim(),
       upiId: upi || '',
       pfpUrl: pfp || '',
       deviceName: deviceName || 'Web',
@@ -129,7 +134,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     const user = await User.findOne({ username: clean });
     if (!user) {
-      return res.status(404).json({ error: 'No account found with this username.' });
+      return res.status(404).json({ error: 'Account not found. Create an account first.' });
     }
     if (user.pin !== pin) {
       return res.status(401).json({ error: 'Incorrect 4-digit PIN.' });
@@ -157,18 +162,31 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.post('/api/users/profile', async (req, res) => {
+  try {
+    const { id, name, upi, pfp, deviceName, deviceId } = req.body;
+    const user = await User.findOneAndUpdate(
+      { userId: id },
+      { name, upiId: upi || '', pfpUrl: pfp || '', deviceName, deviceId },
+      { new: true }
+    );
+    res.json({ ok: true, user });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update profile.' });
+  }
+});
+
 // ==========================================
-// EVENT & TRANSACTION ROUTES
+// 3. EVENT & EXPENSE ROUTES
 // ==========================================
 app.get('/api/events', async (req, res) => {
   try {
     const events = await Event.find().sort({ createdAt: -1 }).lean();
     for (const evt of events) {
-      evt.expenses = await Expense.find({ eventId: evt.eventId }).sort({ createdAt: -1 }).lean();
+      const expenses = await Expense.find({ eventId: evt.eventId }).sort({ createdAt: -1 }).lean();
+      evt.expenses = expenses.map(x => ({ ...x, id: x.expenseId }));
       evt.id = evt.eventId;
-      if (evt.memberProfiles instanceof Map) {
-        evt.memberProfiles = Object.fromEntries(evt.memberProfiles);
-      }
+      evt.memberProfiles = evt.memberProfiles || {};
     }
     res.json({ ok: true, events });
   } catch (err) {
@@ -176,12 +194,19 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-// Single lookup for short invite links
 app.get('/api/events/by-code/:code', async (req, res) => {
   try {
-    const event = await Event.findOne({ code: req.params.code }).lean();
+    const cleanCode = req.params.code.trim();
+    const event = await Event.findOne({
+      $or: [
+        { code: { $regex: new RegExp('^' + cleanCode + '$', 'i') } },
+        { eventId: cleanCode }
+      ]
+    }).lean();
+
     if (!event) return res.status(404).json({ error: 'Event not found.' });
-    event.expenses = await Expense.find({ eventId: event.eventId }).sort({ createdAt: -1 }).lean();
+    const expenses = await Expense.find({ eventId: event.eventId }).sort({ createdAt: -1 }).lean();
+    event.expenses = expenses.map(x => ({ ...x, id: x.expenseId }));
     event.id = event.eventId;
     res.json({ ok: true, event });
   } catch (err) {
@@ -199,6 +224,11 @@ app.post('/api/events', async (req, res) => {
       dateISO: evt.dateISO,
       dateStr: evt.dateStr || '',
       createdAtFormatted: evt.createdAtFormatted || '',
+      dayNum: evt.dayNum || 1,
+      monthIndex: evt.monthIndex || 0,
+      monthShort: evt.monthShort || 'JAN',
+      yearNum: evt.yearNum || 2026,
+      iconLetter: evt.iconLetter || evt.name.charAt(0).toUpperCase(),
       createdByUserId: evt.createdByUserId,
       createdByName: evt.createdByName || '',
       members: evt.members || [],
@@ -212,14 +242,32 @@ app.post('/api/events', async (req, res) => {
 
 app.post('/api/events/:eventId/join', async (req, res) => {
   try {
-    const { eventId } = req.params;
+    const target = req.params.eventId.trim();
     const { name, upi, pfp, deviceName, deviceId } = req.body;
-    const event = await Event.findOne({ $or: [{ eventId }, { code: eventId }] });
+
+    const event = await Event.findOne({
+      $or: [
+        { eventId: target },
+        { code: { $regex: new RegExp('^' + target + '$', 'i') } }
+      ]
+    });
     if (!event) return res.status(404).json({ error: 'Event not found.' });
 
-    if (!event.members.includes(name)) event.members.push(name);
-    if (!event.memberProfiles) event.memberProfiles = new Map();
-    event.memberProfiles.set(name, { name, upi: upi || '', pfp: pfp || '', deviceName, deviceId });
+    const exists = event.members.some(m => m.toLowerCase() === name.toLowerCase());
+    if (!exists) {
+      event.members.push(name);
+    }
+
+    const profiles = { ...(event.memberProfiles || {}) };
+    profiles[name] = {
+      name,
+      upi: upi || '',
+      pfp: pfp || '',
+      deviceName: deviceName || 'Member Device',
+      deviceId: deviceId || ''
+    };
+    event.memberProfiles = profiles;
+    event.markModified('memberProfiles');
 
     await event.save();
     res.json({ ok: true, event });
@@ -278,7 +326,9 @@ app.delete('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
 
 app.post('/api/events/:eventId/settlements', async (req, res) => {
   try {
-    const event = await Event.findOne({ $or: [{ eventId: req.params.eventId }, { code: req.params.eventId }] });
+    const event = await Event.findOne({
+      $or: [{ eventId: req.params.eventId }, { code: req.params.eventId }]
+    });
     if (!event) return res.status(404).json({ error: 'Event not found.' });
 
     event.settledTransfers.push({
@@ -299,7 +349,9 @@ app.post('/api/events/:eventId/settlements', async (req, res) => {
 
 app.post('/api/categories', (req, res) => res.json({ ok: true }));
 
-// Short link routes: e.g. /e/dinner-8x2f or /dinner-8x2f
+// ==========================================
+// 4. SERVE FRONTEND & SHORT LINKS (/:code)
+// ==========================================
 const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
 
