@@ -14,7 +14,6 @@ app.use(cors());
 app.use(express.json({ limit: '12mb' }));
 app.use(express.urlencoded({ extended: true, limit: '12mb' }));
 
-// Prevent caching on all API routes so laptop & phones stay in sync
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
@@ -145,7 +144,7 @@ app.post('/api/auth/register', async (req, res) => {
       name: cleanName.charAt(0).toUpperCase() + cleanName.slice(1),
       upiId: (upi || '').trim(),
       pfpUrl: pfp || '',
-      deviceName: deviceName || 'Web Device',
+      deviceName: deviceName || deviceId || 'DEV-WEB',
       deviceId: deviceId || 'DEV-ANON'
     });
     res.status(201).json({
@@ -196,6 +195,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Update Profile + Retroactively Update PFP & UPI Across All Past Events and Transactions
 app.post('/api/users/profile', async (req, res) => {
   try {
     const { id, username, name, upi, pfp, deviceName, deviceId } = req.body;
@@ -205,24 +205,69 @@ app.post('/api/users/profile', async (req, res) => {
       { name, upiId: upi || '', pfpUrl: pfp || '', deviceName, deviceId },
       { new: true }
     );
+
     if (user) {
-      const allEvents = await Event.find({ members: name });
+      // 1. Update user's profile inside every event they are part of
+      const allEvents = await Event.find();
       for (const evt of allEvents) {
-        if (evt.memberProfiles && evt.memberProfiles[name]) {
-          evt.memberProfiles[name] = {
-            ...evt.memberProfiles[name],
-            name: user.name,
+        let modified = false;
+        const profiles = { ...(evt.memberProfiles || {}) };
+
+        for (const key of Object.keys(profiles)) {
+          const mp = profiles[key];
+          if (
+            key.toLowerCase() === user.name.toLowerCase() ||
+            (mp && mp.userId === user.userId) ||
+            (mp && mp.username && mp.username.toLowerCase() === user.username.toLowerCase())
+          ) {
+            profiles[key] = {
+              ...mp,
+              userId: user.userId,
+              username: user.username,
+              name: user.name,
+              upi: user.upiId,
+              pfp: user.pfpUrl,
+              deviceName: user.deviceName,
+              deviceId: user.deviceId
+            };
+            modified = true;
+          }
+        }
+
+        if (evt.members.some(m => m.toLowerCase() === user.name.toLowerCase()) && !profiles[user.name]) {
+          profiles[user.name] = {
+            userId: user.userId,
             username: user.username,
+            name: user.name,
             upi: user.upiId,
             pfp: user.pfpUrl,
             deviceName: user.deviceName,
             deviceId: user.deviceId
           };
+          modified = true;
+        }
+
+        if (modified) {
+          evt.memberProfiles = profiles;
           evt.markModified('memberProfiles');
           await evt.save();
         }
       }
+
+      // 2. Retroactively update PFP on all past and current expenses created by this user
+      if (pfp) {
+        await Expense.updateMany(
+          {
+            $or: [
+              { createdByUserId: user.userId },
+              { createdBy: { $regex: new RegExp('^' + user.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') } }
+            ]
+          },
+          { $set: { createdByPfp: user.pfpUrl } }
+        );
+      }
     }
+
     res.json({ ok: true, user });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update profile.' });
@@ -293,6 +338,27 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
+// Delete Event & Associated Expenses
+app.delete('/api/events/:eventId', async (req, res) => {
+  try {
+    const eventDoc = await findEventByIdOrCode(req.params.eventId);
+    if (!eventDoc) return res.status(404).json({ error: 'Event not found.' });
+
+    await Expense.deleteMany({
+      $or: [
+        { eventId: eventDoc.eventId },
+        { eventId: eventDoc.code },
+        { eventCode: eventDoc.code }
+      ]
+    });
+    await Event.deleteOne({ _id: eventDoc._id });
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete event.' });
+  }
+});
+
 app.post('/api/events/:eventId/join', async (req, res) => {
   try {
     const eventDoc = await findEventByIdOrCode(req.params.eventId);
@@ -303,7 +369,7 @@ app.post('/api/events/:eventId/join', async (req, res) => {
     const userId = req.body.userId || '';
     const upi = (req.body.upi || '').trim();
     const pfp = req.body.pfp || '';
-    const deviceName = req.body.deviceName || 'Member Device';
+    const deviceName = req.body.deviceName || req.body.deviceId || 'DEV-MEMBER';
     const deviceId = req.body.deviceId || '';
 
     if (!rawName) return res.status(400).json({ error: 'Participant name required.' });
