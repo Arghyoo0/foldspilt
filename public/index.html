@@ -1474,7 +1474,7 @@
         };
 
         // ===================================================================
-        // HARDWARE DEVICE MODEL & ID EXTRACTOR (Never Generic "Android Phone")
+        // HARDWARE DEVICE MODEL & ID EXTRACTOR (ASCII-Safe for HTTP Headers)
         // ===================================================================
         const DeviceIdentity = {
             deviceName: "DEV-000000",
@@ -1515,7 +1515,7 @@
                     if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
                         const entropy = await navigator.userAgentData.getHighEntropyValues(["model", "platform"]);
                         if (entropy.model && entropy.model.trim() !== "" && entropy.model.trim() !== "K") {
-                            return `${entropy.model.trim()} • ${shortId}`;
+                            return `${entropy.model.trim()} (${shortId})`.replace(/[^\x20-\x7E]/g, "");
                         }
                     }
                 } catch (e) {}
@@ -1525,34 +1525,34 @@
                 if (androidMatch && androidMatch[1]) {
                     const model = androidMatch[1].trim();
                     if (model && model !== "K" && model.length > 1 && !/wv/i.test(model)) {
-                        return `${model} • ${shortId}`;
+                        return `${model} (${shortId})`.replace(/[^\x20-\x7E]/g, "");
                     }
                 }
 
-                if (/iPhone/i.test(ua)) return `iPhone • ${shortId}`;
-                if (/iPad/i.test(ua)) return `iPad • ${shortId}`;
-                if (/Macintosh/i.test(ua)) return `Mac • ${shortId}`;
-                if (/Windows/i.test(ua)) return `PC • ${shortId}`;
+                if (/iPhone/i.test(ua)) return `iPhone (${shortId})`;
+                if (/iPad/i.test(ua)) return `iPad (${shortId})`;
+                if (/Macintosh/i.test(ua)) return `Mac (${shortId})`;
+                if (/Windows/i.test(ua)) return `PC (${shortId})`;
 
-                // Return the hardware Device ID directly instead of generic "Android Phone"
                 return shortId;
             }
         };
 
         // ===================================================================
-        // API SERVICE
+        // API SERVICE (Sanitizes Headers so fetch() Never Throws TypeError)
         // ===================================================================
         let isMutatingServer = false;
 
         const ApiService = {
             getHeaders() {
-                const userId = state?.userProfile?.id || "anonymous";
+                const rawUserId = state?.userProfile?.id || state?.userProfile?.userId || "anonymous";
+                const safeDevice = String(DeviceIdentity.deviceName || "DEV-WEB").replace(/[^\x20-\x7E]/g, "");
                 return {
                     "Content-Type": "application/json",
                     "Cache-Control": "no-cache",
-                    "X-User-Id": userId,
-                    "X-Device-Id": DeviceIdentity.deviceId,
-                    "X-Device-Name": DeviceIdentity.deviceName
+                    "X-User-Id": String(rawUserId).replace(/[^\x20-\x7E]/g, ""),
+                    "X-Device-Id": String(DeviceIdentity.deviceId || "DEV-000").replace(/[^\x20-\x7E]/g, ""),
+                    "X-Device-Name": safeDevice
                 };
             },
 
@@ -1569,7 +1569,8 @@
                     });
                     return await res.json();
                 } catch (err) {
-                    return { ok: false };
+                    console.error("[ApiService Error]:", err);
+                    return { ok: false, error: err.message };
                 } finally {
                     if (method !== "GET") isMutatingServer = false;
                 }
@@ -3126,8 +3127,14 @@
         }
 
         function createEventObject(title, dateISO) {
-            const me = state.userProfile;
-            const dt = dateISO ? new Date(dateISO + "T12:00:00") : new Date();
+            const me = state.userProfile || {};
+            const myId = me.id || me.userId || ("usr_" + (me.username || "host"));
+            const myName = me.name || me.username || "Host";
+
+            const parsedDate = (dateISO && !isNaN(new Date(dateISO + "T12:00:00").getTime()))
+                ? new Date(dateISO + "T12:00:00")
+                : new Date();
+
             const monthShortNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             const monthPretty = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -3139,30 +3146,30 @@
                 id: "evt_" + Date.now() + "_" + token,
                 code: slug,
                 name: title,
-                dateISO: dt.toISOString().slice(0, 10),
-                dateStr: `${monthPretty[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
-                createdAtFormatted: `${monthPretty[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
-                dayNum: dt.getDate(),
-                monthIndex: dt.getMonth(),
-                monthShort: monthShortNames[dt.getMonth()],
-                yearNum: dt.getFullYear(),
+                dateISO: parsedDate.toISOString().slice(0, 10),
+                dateStr: `${monthPretty[parsedDate.getMonth()]} ${parsedDate.getDate()}, ${parsedDate.getFullYear()}`,
+                createdAtFormatted: `${monthPretty[parsedDate.getMonth()]} ${parsedDate.getDate()}, ${parsedDate.getFullYear()}`,
+                dayNum: parsedDate.getDate(),
+                monthIndex: parsedDate.getMonth(),
+                monthShort: monthShortNames[parsedDate.getMonth()],
+                yearNum: parsedDate.getFullYear(),
                 iconLetter: newEventCoverState.type === "emoji" ? newEventCoverState.value : title.charAt(0).toUpperCase(),
                 coverType: newEventCoverState.type,
                 coverValue: newEventCoverState.value,
-                createdByUserId: me.id,
-                createdByName: me.name,
+                createdByUserId: myId,
+                createdByName: myName,
                 createdByUsername: me.username || "",
-                members: [me.name],
+                members: [myName],
                 memberUsernames: me.username ? [me.username] : [],
                 memberProfiles: {
-                    [me.name]: {
-                        userId: me.id,
+                    [myName]: {
+                        userId: myId,
                         username: me.username || "",
-                        name: me.name,
-                        upi: me.upi,
-                        pfp: me.pfp,
-                        deviceName: me.deviceName,
-                        deviceId: me.deviceId
+                        name: myName,
+                        upi: me.upi || "",
+                        pfp: me.pfp || DEFAULT_MONOLITH_PFP,
+                        deviceName: DeviceIdentity.deviceName,
+                        deviceId: DeviceIdentity.deviceId
                     }
                 },
                 settledTransfers: [],
@@ -3170,40 +3177,27 @@
             };
         }
 
-        window.openCreateEventModal = function() {
-            newEventCoverState = { type: "emoji", value: "🎉" };
-            const preview = document.getElementById("newEventCoverPreview");
-            if (preview) preview.innerHTML = "🎉";
-            const dateInp = document.getElementById("newEventDateInput");
-            if (dateInp && !dateInp.value) dateInp.value = new Date().toISOString().slice(0, 10);
-            document.getElementById("createOrJoinEventModal").classList.remove("hidden");
-            setTimeout(() => document.getElementById("newEventTitleInput")?.focus(), 100);
-        };
-
-        window.closeCreateEventModal = () => document.getElementById("createOrJoinEventModal").classList.add("hidden");
-
         window.createNewEventFromModal = async function() {
             const title = (document.getElementById("newEventTitleInput").value || "").trim();
             const dateISO = document.getElementById("newEventDateInput").value;
             if (!title) return showToast("Enter a name for the event", "error");
 
             const btn = document.getElementById("createEventSubmitBtn");
-            if (btn) { btn.disabled = true; btn.textContent = "Saving to Cloud..."; }
+            if (btn) { btn.disabled = true; btn.textContent = "Creating Event..."; }
 
             const newEvt = createEventObject(title, dateISO);
-            const res = await ApiService.createEvent(newEvt);
+            state.events.unshift(newEvt);
+            state.activeEventId = newEvt.id;
+            state.calYear = newEvt.yearNum;
+            state.calMonth = newEvt.monthIndex;
+            saveLocalState();
 
+            const res = await ApiService.createEvent(newEvt);
             if (btn) { btn.disabled = false; btn.textContent = "Create Event & Show Confirmation"; }
 
-            if (!res || !res.ok) {
-                return showToast("Could not reach cloud server. Check connection and try again.", "error");
-            }
-
-            const savedEvt = res.event || newEvt;
+            const savedEvt = (res && res.event) ? res.event : newEvt;
             await syncEventsWithServer(true);
-            state.activeEventId = savedEvt.id || savedEvt.eventId;
-            state.calYear = savedEvt.yearNum;
-            state.calMonth = savedEvt.monthIndex;
+            state.activeEventId = savedEvt.id || savedEvt.eventId || newEvt.id;
 
             document.getElementById("newEventTitleInput").value = "";
             closeCreateEventModal();
