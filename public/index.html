@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- QRious Scannable QR Code Generator Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <!-- Google Fonts: Inter & JetBrains Mono -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <script>
@@ -120,25 +122,66 @@
         .animate-fade {
             animation: fadeIn 0.2s ease-out forwards;
         }
+        /* Swipe to Approve Slider Track */
+        .swipe-track {
+            position: relative;
+            height: 60px;
+            background: #14161b;
+            border: 1px solid #282c35;
+            border-radius: 9999px;
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+        }
+        .swipe-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 0%;
+            background: linear-gradient(90deg, rgba(92,133,255,0.22) 0%, rgba(92,133,255,0.48) 100%);
+            pointer-events: none;
+        }
+        .swipe-thumb {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 50px;
+            height: 50px;
+            border-radius: 9999px;
+            background: linear-gradient(180deg, #648dff 0%, #527bf7 100%);
+            color: #060913;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 4px 16px rgba(92, 133, 255, 0.5);
+            cursor: grab;
+            z-index: 10;
+        }
+        .swipe-thumb:active {
+            cursor: grabbing;
+            transform: scale(0.97);
+        }
     </style>
 </head>
 <body class="bg-black text-white min-h-screen flex justify-center selection:bg-fold-blue selection:text-white">
 
-    <!-- Hidden File Input for PFP Upload (Used in Onboarding & Profile Overlay) -->
+    <!-- Hidden File Input for PFP Upload (Used in Auth Setup & Profile Overlay) -->
     <input type="file" id="globalPfpFileInput" accept="image/*" class="hidden" onchange="handlePfpFileSelected(event)">
 
     <!-- MOBILE APP SHELL CONTAINER -->
     <div class="w-full max-w-[430px] min-h-screen bg-black relative pb-28 sm:border-x sm:border-[#1a1c20] shadow-2xl">
 
         <!-- TOAST NOTIFICATION CONTAINER -->
-        <div id="toastContainer" class="fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-[90] flex flex-col gap-2 pointer-events-none"></div>
+        <div id="toastContainer" class="fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-[95] flex flex-col gap-2 pointer-events-none"></div>
 
         <!-- ===================================================================
-             FIRST-TIME USER ONBOARDING SCREEN (Newly Installed App Setup)
+             AUTH SCREEN: LOGIN & CREATE ACCOUNT (Username + 4-Digit PIN)
         ==================================================================== -->
-        <div id="onboardingScreen" class="fixed inset-0 z-[70] hidden bg-black overflow-y-auto flex justify-center animate-fade">
-            <div class="w-full max-w-[430px] min-h-screen px-5 py-8 flex flex-col justify-between">
-                <div class="space-y-6">
+        <div id="authScreen" class="fixed inset-0 z-[70] hidden bg-black overflow-y-auto flex justify-center animate-fade">
+            <div class="w-full max-w-[430px] min-h-screen px-5 py-7 flex flex-col justify-between">
+                <div class="space-y-5">
                     <!-- Brand Header -->
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2.5">
@@ -151,15 +194,18 @@
                             <span class="text-lg font-bold tracking-tight text-white">FoldSplit</span>
                         </div>
                         <span class="px-2.5 py-1 rounded-full bg-[#15171c] border border-[#262930] text-[11px] font-mono text-fold-muted">
-                            v1.0 • Web Link
+                            PIN Auth • Sync
                         </span>
                     </div>
 
-                    <div class="space-y-1.5 pt-2">
-                        <h1 class="text-[28px] font-extrabold tracking-tight text-white leading-tight">Set up your profile</h1>
-                        <p class="text-sm text-[#8b8e96] leading-relaxed">
-                            No app download needed. Your profile and hardware device ID are automatically linked to every expense you add.
-                        </p>
+                    <!-- Segmented Auth Switcher: Log In | Create Account -->
+                    <div class="grid grid-cols-2 p-1 rounded-2xl bg-[#121316] border border-[#23252a] text-xs font-bold">
+                        <button type="button" id="authTabBtn_LOGIN" onclick="switchAuthMode('LOGIN')" class="py-2.5 rounded-xl bg-[#24262d] text-white transition">
+                            Log In
+                        </button>
+                        <button type="button" id="authTabBtn_SIGNUP" onclick="switchAuthMode('SIGNUP')" class="py-2.5 rounded-xl text-[#8b8e96] hover:text-white transition">
+                            Create Account
+                        </button>
                     </div>
 
                     <!-- Invited Event Banner (Shown if user opened a shared ?event= link) -->
@@ -167,57 +213,179 @@
                         <div class="w-9 h-9 rounded-xl bg-fold-blue text-black flex items-center justify-center font-extrabold text-sm shrink-0">
                             <i class="fa-solid fa-link"></i>
                         </div>
-                        <div class="text-xs">
-                            <div class="text-white font-bold">Joining Shared Event Link</div>
-                            <div id="onboardingInviteCodeText" class="text-fold-blueText font-mono mt-0.5"></div>
+                        <div class="text-xs min-w-0">
+                            <div class="text-white font-bold truncate" id="onboardingInviteTitleText">Event Invite Waiting</div>
+                            <div id="onboardingInviteCodeText" class="text-fold-blueText font-mono mt-0.5 truncate">Log in or sign up to review & swipe to join</div>
                         </div>
                     </div>
 
-                    <!-- Avatar / PFP Upload Picker -->
-                    <div class="fold-card p-5 flex flex-col items-center text-center space-y-3">
-                        <div onclick="triggerPfpUpload()" class="relative cursor-pointer group">
-                            <img id="onboardingPfpPreview" src="" alt="Profile Picture" class="w-24 h-24 rounded-full object-cover border-2 border-[#2e323b] group-hover:border-fold-blue transition">
-                            <div class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-fold-blue text-black flex items-center justify-center shadow-lg border-2 border-black">
-                                <i class="fa-solid fa-camera text-xs"></i>
-                            </div>
+                    <!-- LOGIN FORM VIEW -->
+                    <div id="authView_LOGIN" class="space-y-4 pt-1">
+                        <div class="space-y-1">
+                            <h1 class="text-[26px] font-extrabold tracking-tight text-white leading-tight">Welcome back</h1>
+                            <p class="text-xs text-[#8b8e96]">Enter your unique username and 4-digit PIN to load your profile & events.</p>
                         </div>
-                        <div>
-                            <button type="button" onclick="triggerPfpUpload()" class="text-xs font-bold text-fold-blueText hover:underline">
-                                Upload Profile Photo
+
+                        <div class="fold-card p-4 space-y-4">
+                            <div>
+                                <label class="text-xs font-semibold text-[#9ca3af] block mb-1.5">Username</label>
+                                <div class="relative">
+                                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#686b73] font-mono text-sm">@</span>
+                                    <input type="text" id="loginUsernameInput" placeholder="arghya" autocapitalize="none" class="w-full pl-8 pr-4 py-3 rounded-xl bg-black border border-[#262930] text-sm font-mono text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue transition">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-semibold text-[#9ca3af] block mb-1.5">4-Digit Security PIN</label>
+                                <input type="password" id="loginPinInput" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="••••" class="w-full px-4 py-3 rounded-xl bg-black border border-[#262930] text-center text-xl font-mono tracking-[1em] text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue transition">
+                            </div>
+
+                            <button type="button" onclick="handleLoginSubmit()" class="w-full py-3.5 rounded-2xl bg-fold-blue hover:opacity-95 text-black font-extrabold text-sm shadow-lg active:scale-[0.99] transition">
+                                Unlock & Log In
                             </button>
-                            <p class="text-[11px] text-[#787b84] mt-0.5">Shown on your transactions & event splits</p>
+                        </div>
+
+                        <!-- Saved Accounts Quick-Select List on This Browser -->
+                        <div id="savedAccountsBox" class="hidden space-y-2 pt-1">
+                            <div class="text-[11px] font-semibold uppercase tracking-wider text-[#686b73]">Saved Accounts on This Browser</div>
+                            <div id="savedAccountsList" class="space-y-1.5"></div>
                         </div>
                     </div>
 
-                    <!-- Form Inputs (Name & UPI ID) -->
-                    <div class="space-y-4">
-                        <div>
-                            <label class="text-xs font-semibold text-[#9ca3af] block mb-1.5">Your Name <span class="text-fold-red">*</span></label>
-                            <input type="text" id="onboardingNameInput" placeholder="e.g. Arghya" class="w-full px-4 py-3.5 rounded-2xl bg-[#121316] border border-[#262930] text-base font-semibold text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue transition">
+                    <!-- CREATE ACCOUNT (SIGN UP) FORM VIEW -->
+                    <div id="authView_SIGNUP" class="hidden space-y-4 pt-1">
+                        <div class="space-y-1">
+                            <h1 class="text-[24px] font-extrabold tracking-tight text-white leading-tight">Create your account</h1>
+                            <p class="text-xs text-[#8b8e96]">Protected by a 4-digit PIN and automatically bound to your hardware device.</p>
                         </div>
 
-                        <div>
-                            <label class="text-xs font-semibold text-[#9ca3af] block mb-1.5">Your UPI ID <span class="text-[#686b73] font-normal">(for receiving direct payments)</span></label>
-                            <input type="text" id="onboardingUpiInput" placeholder="e.g. yourname@okaxis" class="w-full px-4 py-3.5 rounded-2xl bg-[#121316] border border-[#262930] text-sm font-mono text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue transition">
+                        <!-- Avatar / PFP Upload Picker -->
+                        <div class="fold-card p-4 flex items-center gap-4">
+                            <div onclick="triggerPfpUpload()" class="relative cursor-pointer group shrink-0">
+                                <img id="onboardingPfpPreview" src="" alt="Profile Picture" class="w-16 h-16 rounded-full object-cover border-2 border-[#2e323b] group-hover:border-fold-blue transition">
+                                <div class="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-fold-blue text-black flex items-center justify-center shadow border border-black">
+                                    <i class="fa-solid fa-camera text-[10px]"></i>
+                                </div>
+                            </div>
+                            <div class="text-left">
+                                <button type="button" onclick="triggerPfpUpload()" class="text-xs font-bold text-fold-blueText hover:underline">
+                                    Upload Profile Picture
+                                </button>
+                                <p class="text-[11px] text-[#787b84] mt-0.5">Shown on your transactions & event splits</p>
+                            </div>
                         </div>
 
-                        <!-- Read-Only Auto-Extracted Device Fingerprint Info -->
-                        <div class="fold-subcard p-3.5 flex items-center justify-between text-xs">
-                            <div class="flex items-center gap-2.5 text-[#9ca3af]">
-                                <i class="fa-solid fa-microchip text-fold-blueText"></i>
-                                <span>Auto-Detected Device</span>
+                        <div class="fold-card p-4 space-y-3.5">
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="text-xs font-semibold text-[#9ca3af] block mb-1">Unique Username <span class="text-fold-red">*</span></label>
+                                    <div class="relative">
+                                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[#686b73] font-mono text-xs">@</span>
+                                        <input type="text" id="signupUsernameInput" placeholder="arghya" autocapitalize="none" class="w-full pl-7 pr-3 py-2.5 rounded-xl bg-black border border-[#262930] text-xs font-mono text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-[#9ca3af] block mb-1">4-Digit PIN <span class="text-fold-red">*</span></label>
+                                    <input type="password" id="signupPinInput" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="4 digits" class="w-full px-3 py-2.5 rounded-xl bg-black border border-[#262930] text-center text-sm font-mono tracking-[0.4em] text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue">
+                                </div>
                             </div>
-                            <div class="text-right">
-                                <div id="onboardingDetectedDeviceName" class="font-mono font-semibold text-white">Detecting...</div>
-                                <div id="onboardingDetectedDeviceId" class="text-[10px] font-mono text-[#686b73]"></div>
+
+                            <div>
+                                <label class="text-xs font-semibold text-[#9ca3af] block mb-1">Your Display Name <span class="text-fold-red">*</span></label>
+                                <input type="text" id="onboardingNameInput" placeholder="e.g. Arghya" class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#262930] text-sm font-semibold text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue">
                             </div>
+
+                            <div>
+                                <label class="text-xs font-semibold text-[#9ca3af] block mb-1">Your UPI ID <span class="text-[#686b73] font-normal">(generates QR code for friends)</span></label>
+                                <input type="text" id="onboardingUpiInput" placeholder="e.g. arghya@okaxis" class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#262930] text-xs font-mono text-white placeholder-[#5e6168] focus:outline-none focus:border-fold-blue">
+                            </div>
+
+                            <!-- Read-Only Auto-Extracted Device Fingerprint Info -->
+                            <div class="fold-subcard p-3 flex items-center justify-between text-xs">
+                                <div class="flex items-center gap-2 text-[#9ca3af]">
+                                    <i class="fa-solid fa-microchip text-fold-blueText"></i>
+                                    <span>Extracted Device</span>
+                                </div>
+                                <div class="text-right">
+                                    <div id="onboardingDetectedDeviceName" class="font-mono font-semibold text-white">Detecting...</div>
+                                    <div id="onboardingDetectedDeviceId" class="text-[10px] font-mono text-[#686b73]"></div>
+                                </div>
+                            </div>
+
+                            <button type="button" onclick="completeOnboardingSetup()" class="w-full py-3.5 rounded-2xl bg-fold-blue hover:opacity-95 text-black font-extrabold text-sm shadow-lg active:scale-[0.99] transition">
+                                Create Account & Continue
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="pt-6">
-                    <button type="button" onclick="completeOnboardingSetup()" class="w-full py-4 rounded-2xl bg-fold-blue hover:opacity-95 text-black font-extrabold text-[15px] shadow-lg active:scale-[0.99] transition">
-                        Continue to FoldSplit
+                <div class="pt-4 text-center text-[11px] text-[#686b73]">
+                    Credentials & events sync locally and via REST API headers
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================
+             SWIPE-TO-APPROVE EVENT INVITE OVERLAY (Shows Event Name, Creator & Timestamp)
+        ==================================================================== -->
+        <div id="swipeJoinOverlay" class="fixed inset-0 z-[80] hidden bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-fade">
+            <div class="fold-card w-full max-w-[395px] p-6 space-y-5 border border-[#2c303a] shadow-2xl">
+                <!-- Top Badge -->
+                <div class="flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-fold-navyPill border border-fold-blue/40 text-fold-blueText text-[11px] font-bold uppercase tracking-wider">
+                        <i class="fa-solid fa-ticket"></i> Event Invite Link
+                    </span>
+                    <button onclick="declineSwipeJoin()" class="w-8 h-8 rounded-full bg-[#191b20] text-[#8b8e96] hover:text-white flex items-center justify-center">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Event Icon + Event Name -->
+                <div class="text-center space-y-2 pt-1">
+                    <div id="swipeJoinEventIcon" class="w-16 h-16 rounded-2xl bg-fold-blue text-black font-extrabold text-2xl flex items-center justify-center mx-auto shadow-lg">
+                        E
+                    </div>
+                    <div class="text-xs font-semibold uppercase tracking-widest text-[#787b84]">You're invited to join</div>
+                    <h2 id="swipeJoinEventName" class="text-2xl font-extrabold text-white tracking-tight">Event Name</h2>
+                </div>
+
+                <!-- Metadata Card: Created By & Created When -->
+                <div class="fold-subcard p-4 space-y-3 divide-y divide-[#252830]">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-[#8b8e96]">Created By</span>
+                        <div class="flex items-center gap-2">
+                            <img id="swipeJoinCreatorPfp" src="" alt="Creator" class="w-6 h-6 rounded-full object-cover border border-[#363a45]">
+                            <span id="swipeJoinCreatorName" class="text-xs font-bold text-white">Creator</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 flex items-center justify-between">
+                        <span class="text-xs text-[#8b8e96]">Created When</span>
+                        <span id="swipeJoinCreatedWhen" class="text-xs font-mono font-semibold text-[#e5e7eb]">Date & Time</span>
+                    </div>
+
+                    <div class="pt-3 flex items-center justify-between">
+                        <span class="text-xs text-[#8b8e96]">Joining As</span>
+                        <div class="text-right">
+                            <span id="swipeJoinUserBadge" class="text-xs font-bold text-fold-blueText">User</span>
+                            <div id="swipeJoinDeviceBadge" class="text-[10px] font-mono text-[#787b84]">Device</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Swipe-to-Approve Slider -->
+                <div class="space-y-2 pt-1">
+                    <div id="swipeTrack" class="swipe-track">
+                        <div id="swipeFill" class="swipe-fill"></div>
+                        <div id="swipeLabel" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold tracking-wider uppercase text-[#9ca3af] pointer-events-none pl-8">
+                            Swipe to Approve & Join <i class="fa-solid fa-angles-right ml-1.5 text-fold-blueText animate-pulse"></i>
+                        </div>
+                        <div id="swipeThumb" class="swipe-thumb">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </div>
+                    </div>
+                    <button type="button" onclick="declineSwipeJoin()" class="w-full py-2 text-xs font-semibold text-[#787b84] hover:text-white transition">
+                        Decline & Return to Home
                     </button>
                 </div>
             </div>
@@ -286,15 +454,17 @@
                 </div>
             </div>
 
-            <!-- Shareable Link & Add People Pill Bar (Matches Fold 'Get Plus at a discount / Upgrade' bar) -->
+            <!-- Hidden URL Event Share Bar (Shows Event Name Instead of Raw URL, Copies Actual Link) -->
             <div class="fold-card px-4 py-3.5 flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 min-w-0">
+                <div class="flex items-center gap-2.5 min-w-0">
                     <span class="w-2 h-2 rounded-full bg-fold-green shrink-0"></span>
-                    <span id="homeShareLinkText" class="text-[13.5px] text-[#9ca3af] truncate font-medium">Create an event to generate a share link</span>
+                    <i class="fa-solid fa-link text-xs text-fold-blueText shrink-0"></i>
+                    <span id="homeShareLinkText" class="text-[13.5px] text-white truncate font-semibold">Create an event to share invite link</span>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
-                    <button onclick="copyEventShareLink()" class="text-[13.5px] font-semibold text-fold-blueText hover:underline">
-                        Copy Link
+                    <button onclick="copyEventShareLink()" class="text-[13.5px] font-semibold text-fold-blueText hover:underline flex items-center gap-1">
+                        <i class="fa-regular fa-copy text-xs"></i>
+                        <span>Copy Link</span>
                     </button>
                     <span class="text-[#2c2f36]">|</span>
                     <button onclick="openShareAndPeopleModal()" class="text-[13.5px] font-semibold text-fold-blueText hover:underline">
@@ -303,7 +473,7 @@
                 </div>
             </div>
 
-            <!-- TOTAL SPEND CARD (Matches Fold 'Total Balance ₹900.72' with green sparkline) -->
+            <!-- TOTAL SPEND CARD (With Functional Color-Coded Per-Person Spend Bar Chart) -->
             <div class="fold-card p-5 space-y-4">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2.5">
@@ -317,31 +487,27 @@
                     </button>
                 </div>
 
-                <!-- Amount + Green Sparkline Row -->
-                <div class="flex items-center justify-between pt-1 pb-3 border-b border-[#22242a]">
-                    <div class="tabular-nums flex items-baseline">
+                <!-- Amount + Mini Per-Person Vertical Bar Chart Row -->
+                <div class="flex items-end justify-between gap-4 pt-1 pb-3 border-b border-[#22242a]">
+                    <div class="tabular-nums flex items-baseline shrink-0">
                         <span class="text-lg font-bold text-[#9ca3af] mr-1 -translate-y-2">₹</span>
                         <span id="homeTotalSpendWhole" class="text-[34px] font-extrabold tracking-tight text-white leading-none">0</span>
                         <span id="homeTotalSpendDec" class="text-[20px] font-bold text-[#6b7280] ml-0.5">.00</span>
                     </div>
 
-                    <!-- Fold Green Sparkline SVG -->
-                    <div class="w-28 h-11">
-                        <svg viewBox="0 0 120 42" fill="none" class="w-full h-full overflow-visible">
-                            <defs>
-                                <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stop-color="#22c55e" stop-opacity="0.35"/>
-                                    <stop offset="100%" stop-color="#22c55e" stop-opacity="0.0"/>
-                                </linearGradient>
-                            </defs>
-                            <path d="M2 32 L14 31 L20 35 L32 35 L46 35 L50 8 L58 14 L68 25 L82 25 L92 29 L96 15 L100 36 L105 28 L118 28 L118 40 L2 40 Z" fill="url(#sparkFill)"/>
-                            <path d="M2 32 L14 31 L20 35 L32 35 L46 35 L50 8 L58 14 L68 25 L82 25 L92 29 L96 15 L100 36 L105 28 L118 28" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                    <!-- Functional Mini Vertical Column Chart (Color-coded per person) -->
+                    <div id="homePeopleMiniColumns" class="flex items-end justify-end gap-2 h-14 flex-1 max-w-[180px]">
+                        <!-- Populated dynamically with each person's colored spend column -->
                     </div>
                 </div>
 
+                <!-- Detailed Color-Coded Per-Person Spend Bar Chart & Legend -->
+                <div id="homePeopleSpendBarChart" class="space-y-2 pt-0.5">
+                    <!-- Dynamically populated by JS showing each person's assigned color, bar, amount & % -->
+                </div>
+
                 <!-- Bottom Pills inside Total Spend Card -->
-                <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[#1d1f24]">
                     <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#090a0c] border border-[#1d1f24]">
                         <span class="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-600 to-red-500 flex items-center justify-center text-[9px] font-bold text-white">∞</span>
                         <span id="homeUpiCashSplitText" class="text-xs font-semibold text-[#e5e7eb] tabular-nums">UPI ₹0 • Cash ₹0</span>
@@ -406,7 +572,7 @@
                 <div class="flex items-center justify-between border-b border-[#202227] pb-3.5">
                     <div class="flex items-center gap-2.5">
                         <i class="fa-solid fa-building-columns text-[#9ca3af] text-sm"></i>
-                        <span class="text-[15px] font-medium text-[#9ca3af]">Settlements & UPI Pay</span>
+                        <span class="text-[15px] font-medium text-[#9ca3af]">Settlements & UPI QR</span>
                     </div>
                     <button onclick="openProfileOverlay()" class="text-xs font-semibold text-fold-blueText hover:underline">
                         My UPI ▸
@@ -550,8 +716,8 @@
                         <i class="fa-solid fa-calendar-plus text-sm"></i>
                     </div>
                     <div>
-                        <div class="text-[15px] font-semibold text-[#e5e7eb]">Create New Event Link</div>
-                        <div class="text-xs text-[#787b84]">Generate a shareable link for a new outing</div>
+                        <div class="text-[15px] font-semibold text-[#e5e7eb]">Create or Join Event Link</div>
+                        <div class="text-xs text-[#787b84]">Generate a shareable link or paste an invite</div>
                     </div>
                 </div>
                 <span class="px-3.5 py-1.5 rounded-xl bg-fold-navyPill text-fold-blueText text-[11px] font-bold tracking-wider uppercase">
@@ -681,7 +847,7 @@
                 </div>
             </button>
 
-            <!-- 3. Events Icon (Custom Event Ticket / Star Pass SVG — Replaces old portfolio graph icon) -->
+            <!-- 3. Events Icon (Custom Event Ticket / Star Pass SVG) -->
             <button onclick="switchBottomTab('EVENTS')" id="navBtn_EVENTS" class="py-2.5 flex items-center justify-center text-[#8b8e96] hover:text-white transition" title="Events">
                 <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/>
@@ -696,16 +862,12 @@
         </nav>
 
         <!-- ===================================================================
-             FULL-SCREEN PERSONAL PROFILE OVERLAY (Matches fold 6.jpeg + Refinements #1, #2, #4)
-             - Removed settings gear icon on top right
-             - Removed Active Profile switcher & Squad Registry
-             - Read-only code-extracted Device Name & Device ID
-             - Tap avatar to change PFP anytime
+             FULL-SCREEN PERSONAL PROFILE OVERLAY (Matches fold 6.jpeg)
         ==================================================================== -->
         <div id="profileOverlay" class="fixed inset-0 z-50 hidden bg-black overflow-y-auto flex justify-center animate-fade">
             <div class="w-full max-w-[430px] min-h-screen px-4 pt-5 pb-12 space-y-5">
 
-                <!-- Top Bar: Close (X) on Left, 'Profile' Centered, Spacer on Right (No Settings Gear) -->
+                <!-- Top Bar: Close (X) on Left, 'Profile' Centered, Spacer on Right -->
                 <div class="flex items-center justify-between">
                     <button onclick="closeProfileOverlay()" class="w-11 h-11 rounded-full bg-[#15171b] border border-[#262930] flex items-center justify-center text-white active:scale-95 transition">
                         <i class="fa-solid fa-xmark text-lg"></i>
@@ -728,14 +890,14 @@
                         <button onclick="triggerPfpUpload()" class="absolute top-0 right-0 w-8 h-8 rounded-full bg-[#24272d] border border-[#3a3e47] text-white flex items-center justify-center shadow-lg" title="Change Profile Picture">
                             <i class="fa-solid fa-camera text-xs"></i>
                         </button>
-                        <!-- Overlapping Auto-Detected Device Badge (Matches FOLD LITE pill in fold 6.jpeg) -->
+                        <!-- Overlapping Auto-Detected Device Badge -->
                         <div class="-mt-3.5 relative z-10 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#24272d] border border-[#3a3e47] text-[11px] font-extrabold tracking-wider uppercase text-white shadow-lg">
                             <i class="fa-solid fa-circle-half-stroke text-xs"></i>
                             <span id="profileOverlayDeviceBadge">DEVICE</span>
                         </div>
                     </div>
 
-                    <!-- UPI Handle Pill (Matches @notarghyaatall in fold 6.jpeg) -->
+                    <!-- UPI Handle Pill -->
                     <button onclick="focusUpiEditInput()" class="mt-3 px-4 py-1.5 rounded-full bg-[#17191e] border border-[#262930] hover:border-fold-blue text-[16px] font-semibold text-white flex items-center gap-2 transition">
                         <span id="profileOverlayUpiPill">@add_upi_id</span>
                         <i class="fa-solid fa-caret-right text-xs text-[#8b8e96]"></i>
@@ -746,21 +908,21 @@
                     </div>
                 </div>
 
-                <!-- Periwinkle Blue Card (Matches Fold 6 'Upgrade to Plus' card — Direct UPI Payment Info) -->
+                <!-- Periwinkle Blue Card (UPI QR Code Info) -->
                 <div class="fold-card p-3 space-y-2.5">
                     <div onclick="focusUpiEditInput()" class="fold-blue-card px-4 py-3.5 flex items-center justify-between cursor-pointer">
                         <div class="flex items-center gap-2.5 font-bold text-[15px]">
-                            <i class="fa-solid fa-bolt"></i>
-                            <span>Instant UPI Settlement Redirect</span>
+                            <i class="fa-solid fa-qrcode"></i>
+                            <span>Instant Scannable UPI QR Code</span>
                         </div>
                         <i class="fa-solid fa-chevron-right text-sm"></i>
                     </div>
                     <p class="px-1 text-[13px] text-[#9ca3af] leading-relaxed">
-                        Add your UPI ID below so friends in your event link are directly redirected to their UPI payment window when settling back with you.
+                        Add your UPI ID below so friends in your event link can scan your live UPI QR code when settling back with you.
                     </p>
                 </div>
 
-                <!-- Personal Details & Read-Only Hardware Device Card (Fold 6 list rows style) -->
+                <!-- Personal Details & Read-Only Hardware Device Card -->
                 <div class="fold-card divide-y divide-[#22242a] overflow-hidden">
                     <!-- Row 1: Change Profile Photo -->
                     <div onclick="triggerPfpUpload()" class="p-4 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition">
@@ -792,7 +954,7 @@
                                 <i class="fa-solid fa-at text-[#8b8e96] w-5 text-center"></i>
                                 <span>Your UPI ID</span>
                             </div>
-                            <span class="px-2 py-0.5 rounded bg-black text-[10px] font-bold uppercase text-fold-green">DIRECT PAY</span>
+                            <span class="px-2 py-0.5 rounded bg-black text-[10px] font-bold uppercase text-fold-green">QR READY</span>
                         </div>
                         <div class="flex gap-2">
                             <input type="text" id="profileUpiInput" placeholder="yourname@okaxis" class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-[#2a2d35] text-sm text-white font-mono focus:outline-none focus:border-fold-blue">
@@ -802,7 +964,7 @@
                         </div>
                     </div>
 
-                    <!-- Row 4: Auto-Extracted Device & Hardware ID (Strictly Read-Only, No User Input) -->
+                    <!-- Row 4: Auto-Extracted Device & Hardware ID (Strictly Read-Only) -->
                     <div class="p-4 flex items-center justify-between">
                         <div class="flex items-center gap-3 text-[15px] font-medium text-white">
                             <i class="fa-solid fa-mobile-screen text-[#8b8e96] w-5 text-center"></i>
@@ -817,7 +979,7 @@
                     </div>
                 </div>
 
-                <!-- Two Side-by-Side Total Cards at Bottom (Exact Fold 6 'Bank Accounts / Credit Cards' layout) -->
+                <!-- Two Side-by-Side Total Cards at Bottom -->
                 <div class="grid grid-cols-2 gap-3">
                     <div class="fold-card p-4 space-y-3">
                         <div class="flex items-center justify-between">
@@ -834,6 +996,17 @@
                         </div>
                         <div class="text-[13px] font-medium text-[#8b8e96]">Total Got Back</div>
                     </div>
+                </div>
+
+                <!-- Account Session & Log Out Card -->
+                <div class="fold-card p-4 flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-bold text-white">Logged in Account</div>
+                        <div id="profileLoggedUsername" class="text-xs font-mono text-fold-blueText mt-0.5">@username</div>
+                    </div>
+                    <button onclick="logoutCurrentUser()" class="px-4 py-2 rounded-xl bg-fold-red/15 border border-fold-red/40 text-fold-red text-xs font-bold hover:bg-fold-red/25 transition">
+                        <i class="fa-solid fa-right-from-bracket mr-1"></i> Log Out
+                    </button>
                 </div>
             </div>
         </div>
@@ -923,56 +1096,75 @@
         </div>
 
         <!-- ===================================================================
-             MODAL 2: DIRECT UPI APP REDIRECT WINDOW (GPay / PhonePe / Paytm)
+             MODAL 2: SCANNABLE UPI QR CODE & SETTLEMENT WINDOW
         ==================================================================== -->
         <div id="upiRedirectModal" class="fixed inset-0 z-50 hidden bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade">
-            <div class="fold-card w-full max-w-[410px] rounded-t-[28px] sm:rounded-[24px] p-5 space-y-4 text-center border-t border-[#2e3138]">
+            <div class="fold-card w-full max-w-[415px] rounded-t-[28px] sm:rounded-[24px] p-5 space-y-4 text-center border-t border-[#2e3138] max-h-[92vh] overflow-y-auto">
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-bold uppercase tracking-wider text-fold-blueText flex items-center gap-1.5">
-                        <i class="fa-solid fa-bolt"></i> Direct UPI Payment Window
+                        <i class="fa-solid fa-qrcode"></i> Scan UPI QR to Settle
                     </span>
                     <button onclick="closeUpiRedirectModal()" class="w-8 h-8 rounded-full bg-[#1d1f24] text-[#9ca3af] hover:text-white flex items-center justify-center">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
 
-                <div class="py-1">
-                    <div id="upiPayTitle" class="text-sm font-medium text-[#d1d5db]">Paying Friend</div>
-                    <div id="upiPayVpaBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#181a20] border border-[#2b2e37] text-xs font-mono text-fold-blueText mt-1">
-                        friend@upi
+                <!-- Recipient Info + Amount -->
+                <div class="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#16181e] border border-[#262932]">
+                    <div class="flex items-center gap-2.5 text-left min-w-0">
+                        <img id="upiPayRecipientPfp" src="" alt="Recipient" class="w-10 h-10 rounded-full object-cover border border-[#323642] shrink-0">
+                        <div class="min-w-0">
+                            <div id="upiPayTitle" class="text-xs font-bold text-white truncate">Paying Friend</div>
+                            <div id="upiPayVpaBadge" class="text-[11px] font-mono text-fold-blueText truncate">friend@upi</div>
+                        </div>
                     </div>
-                    <div id="upiPayAmountBig" class="text-4xl font-extrabold text-white tabular-nums mt-2">₹0</div>
+                    <div class="text-right shrink-0">
+                        <div class="text-[10px] uppercase text-[#8b8e96]">Amount</div>
+                        <div id="upiPayAmountBig" class="text-xl font-extrabold text-white tabular-nums">₹0</div>
+                    </div>
                 </div>
 
-                <!-- Real Deep-Link Redirect Button (Triggers upi://pay on mobile phones) -->
-                <a id="upiDeepLinkAnchor" href="#" onclick="handleUpiDeepLinkClick(event)" class="block w-full py-3.5 rounded-2xl bg-fold-blue hover:opacity-95 text-black font-extrabold text-sm shadow-lg transition">
-                    <i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i> Open UPI App & Pay Now
-                </a>
-
-                <!-- Choose Specific UPI App Intent Buttons -->
-                <div class="grid grid-cols-3 gap-2 text-xs font-semibold">
-                    <button onclick="launchSpecificUpiApp('GPay')" class="py-2.5 rounded-xl bg-[#17191e] hover:bg-[#22252c] border border-[#262930] text-white flex flex-col items-center gap-1">
-                        <i class="fa-brands fa-google-pay text-lg text-sky-400"></i>
-                        <span>GPay</span>
-                    </button>
-                    <button onclick="launchSpecificUpiApp('PhonePe')" class="py-2.5 rounded-xl bg-[#17191e] hover:bg-[#22252c] border border-[#262930] text-white flex flex-col items-center gap-1">
-                        <i class="fa-solid fa-mobile-retro text-lg text-purple-400"></i>
-                        <span>PhonePe</span>
-                    </button>
-                    <button onclick="launchSpecificUpiApp('Paytm')" class="py-2.5 rounded-xl bg-[#17191e] hover:bg-[#22252c] border border-[#262930] text-white flex flex-col items-center gap-1">
-                        <i class="fa-solid fa-wallet text-lg text-blue-400"></i>
-                        <span>Paytm</span>
-                    </button>
+                <!-- Scannable White Squircle QR Code Container -->
+                <div class="flex flex-col items-center justify-center py-1">
+                    <div class="p-3.5 rounded-[24px] bg-white shadow-xl border-4 border-[#23262f] inline-flex flex-col items-center">
+                        <canvas id="upiQrCanvas" width="190" height="190" class="w-[190px] h-[190px] rounded-lg"></canvas>
+                        <div class="mt-2 flex items-center gap-3 text-[10px] font-bold text-[#1f2937] uppercase tracking-wider">
+                            <span><i class="fa-brands fa-google-pay text-sm text-sky-600 mr-0.5"></i>GPay</span>
+                            <span>•</span>
+                            <span>PhonePe</span>
+                            <span>•</span>
+                            <span>Paytm</span>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-[#8b8e96] mt-2">Scan with any UPI app to pay <strong id="upiQrSubName" class="text-white">Friend</strong> directly</p>
                 </div>
 
-                <div class="pt-2 border-t border-[#22242a] grid grid-cols-2 gap-2">
-                    <button onclick="confirmSettlementCleared('UPI')" class="py-2.5 rounded-xl bg-fold-green/20 border border-fold-green/40 text-fold-green font-bold text-xs">
+                <!-- Editable Recipient UPI ID (Updates QR Code Live if friend's UPI wasn't added yet) -->
+                <div class="fold-subcard p-3 text-left space-y-1.5">
+                    <label class="text-[11px] font-semibold text-[#9ca3af] flex items-center justify-between">
+                        <span>Recipient UPI ID (Live QR Update)</span>
+                        <span class="text-[10px] font-mono text-fold-green">NPCI UPI QR</span>
+                    </label>
+                    <div class="flex gap-2">
+                        <input type="text" id="upiModalEditVpaInput" oninput="updateLiveQrFromInput()" placeholder="enter-friend-upi@okaxis" class="w-full px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs font-mono text-white focus:outline-none focus:border-fold-blue">
+                    </div>
+                </div>
+
+                <!-- Mark Settled Confirmation Buttons -->
+                <div class="grid grid-cols-2 gap-2.5 pt-1">
+                    <button onclick="confirmSettlementCleared('UPI')" class="py-3 rounded-xl bg-fold-green text-black font-extrabold text-xs shadow active:scale-95 transition">
                         ✓ Mark Paid (UPI)
                     </button>
-                    <button onclick="confirmSettlementCleared('Cash')" class="py-2.5 rounded-xl bg-[#1b1d22] border border-[#2c2f36] text-[#d1d5db] font-bold text-xs">
+                    <button onclick="confirmSettlementCleared('Cash')" class="py-3 rounded-xl bg-[#1b1d22] hover:bg-[#23262d] border border-[#2c2f36] text-white font-bold text-xs active:scale-95 transition">
                         💵 Paid in Cash
                     </button>
                 </div>
+
+                <!-- Secondary Direct UPI App Intent Link for Mobile Phones -->
+                <a id="upiDeepLinkAnchor" href="#" onclick="handleUpiDeepLinkClick(event)" class="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-fold-blueText hover:underline pt-1">
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                    <span>Or tap to open installed UPI app directly</span>
+                </a>
             </div>
         </div>
 
@@ -1003,15 +1195,37 @@
                     </button>
                 </div>
 
-                <!-- Active Event Share Link Box -->
+                <!-- Join an Existing Event via Invite Link or Code (Triggers Swipe-to-Approve) -->
+                <div class="p-3.5 rounded-2xl bg-[#16181d] border border-[#282b33] space-y-2">
+                    <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-right-to-bracket text-fold-green"></i>
+                        <span>Have an Event Invite Link or Code?</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="joinInviteLinkInput" placeholder="Paste invite link or event code..." class="w-full px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs text-white focus:outline-none focus:border-fold-blue">
+                        <button onclick="triggerJoinFromPastedLink()" class="px-3.5 py-2 rounded-xl bg-fold-navyPill border border-fold-blue/40 text-fold-blueText font-bold text-xs shrink-0">
+                            Join
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Event Share Link Box (Hides Raw URL, Displays Event Name & Copies Actual Link) -->
                 <div id="activeEventShareSection" class="space-y-3">
-                    <div class="p-3.5 rounded-2xl bg-[#16181d] border border-[#282b33] space-y-2">
-                        <div class="text-xs font-semibold text-fold-blueText">Share Link for Current Event</div>
-                        <p class="text-[11px] text-[#8b8e96]">Anyone opening this link sets up their profile on their phone and joins this event.</p>
-                        <div class="flex gap-2">
-                            <input type="text" id="modalShareUrlInput" readonly class="w-full px-3 py-2 rounded-xl bg-black border border-[#2a2d35] text-xs font-mono text-[#d1d5db]">
-                            <button onclick="copyEventShareLink()" class="px-3.5 py-2 rounded-xl bg-fold-navyPill border border-fold-blue/40 text-fold-blueText font-bold text-xs shrink-0">
-                                Copy
+                    <div class="p-3.5 rounded-2xl bg-[#16181d] border border-[#282b33] space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-fold-blueText">Share Event Invite Link</span>
+                            <button onclick="previewSwipeJoinForCurrentEvent()" class="text-[11px] font-semibold text-[#9ca3af] hover:text-white underline">
+                                Preview Invite Page
+                            </button>
+                        </div>
+                        <p class="text-[11px] text-[#8b8e96]">Friends opening your copied link see the event name, creator & date and swipe to approve joining.</p>
+                        <div class="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-black border border-[#2a2d35]">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <i class="fa-solid fa-link text-xs text-fold-blueText"></i>
+                                <span id="modalHiddenUrlEventTitle" class="text-xs font-bold text-white truncate">Event Name</span>
+                            </div>
+                            <button onclick="copyEventShareLink()" class="px-3.5 py-1.5 rounded-lg bg-fold-blue text-black font-extrabold text-xs shrink-0 active:scale-95 transition">
+                                Copy Link
                             </button>
                         </div>
                     </div>
@@ -1041,37 +1255,14 @@
 
     <!-- ===================================================================
          BACKEND SPECIFICATION & PRODUCTION APPLICATION LOGIC
-         ===================================================================
-         AI BACKEND GENERATOR SPECIFICATION:
-         -------------------------------------------------------------------
-         1. AUTH & DEVICE HEADERS (Sent automatically on every request):
-            - `X-User-Id`: string (UUID / user_...)
-            - `X-Device-Id`: string (Deterministic hardware fingerprint DEV-...)
-            - `X-Device-Name`: string (Auto-extracted OS/Phone model, e.g. "Poco M7")
-
-         2. REST ENDPOINTS EXPECTED BY `ApiService`:
-            - `POST   /api/users/profile`
-              Body: `{ id, name, upiId, pfpUrl, deviceId, deviceName }`
-            - `GET    /api/events?userId=<id>`
-              Returns: `{ events: Event[], categories: string[] }`
-            - `POST   /api/events`
-              Body: `{ id, code, name, dateISO, createdByUserId, members: Member[] }`
-            - `POST   /api/events/:eventId/join`
-              Body: `{ userId, name, upiId, pfpUrl, deviceId, deviceName }`
-            - `POST   /api/events/:eventId/expenses`
-              Body: `{ id, eventId, title, category, amount, method, paidBy, participants: string[], createdByUserId, createdByName, createdByPfp, deviceId, deviceName, createdAt }`
-            - `PATCH  /api/events/:eventId/expenses/:expenseId`
-              Body: `{ cleared: boolean }`
-            - `DELETE /api/events/:eventId/expenses/:expenseId`
-            - `POST   /api/events/:eventId/settlements`
-              Body: `{ id, from, to, amount, method, settledByDeviceId, settledAt }`
-            - `POST   /api/categories`
-              Body: `{ name: string }`
     ==================================================================== -->
     <script>
         const CONFIG = {
-            API_BASE_URL: "", // Leave empty for local persistence; set to "https://your-api.com" when backend is connected
-            STORAGE_KEY: "foldsplit_prod_v1"
+           API_BASE_URL: window.location.origin, // Automatically connects to Render backend
+            STORAGE_KEY: "foldsplit_prod_v2",
+            USERS_DB_KEY: "foldsplit_users_db_v1",
+            EVENTS_DB_KEY: "foldsplit_events_db_v1",
+            SESSION_KEY: "foldsplit_active_session_v1"
         };
 
         const DEFAULT_CATEGORIES = [
@@ -1082,6 +1273,29 @@
             "HOH",
             "Entertainment"
         ];
+
+        // Distinct Curated Color Palette for Per-Person Spend Bar Chart
+        const PERSON_COLORS = [
+            "#5c85ff", // Fold Periwinkle Blue
+            "#28c76f", // Fold Emerald Green
+            "#f59e0b", // Amber Gold
+            "#ec4899", // Rose Pink
+            "#a855f7", // Vivid Purple
+            "#06b6d4", // Cyan
+            "#f97316", // Orange
+            "#14b8a6"  // Teal
+        ];
+
+        function getPersonColor(name, evt) {
+            const clean = (name || "User").trim();
+            if (evt && Array.isArray(evt.members)) {
+                const idx = evt.members.indexOf(clean);
+                if (idx !== -1) return PERSON_COLORS[idx % PERSON_COLORS.length];
+            }
+            let hash = 0;
+            for (let i = 0; i < clean.length; i++) hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+            return PERSON_COLORS[Math.abs(hash) % PERSON_COLORS.length];
+        }
 
         // Default Monolith SVG Data URI (Matches Fold 1 & Fold 6 surreal green meadow avatar)
         const DEFAULT_MONOLITH_PFP = "data:image/svg+xml;utf8," + encodeURIComponent(`
@@ -1175,7 +1389,6 @@
 
             async extractDeviceModelName() {
                 try {
-                    // 1. Try Client Hints High Entropy API (Android Chrome / Edge / Opera returns exact phone model e.g. "Poco M7", "SM-S911B")
                     if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
                         const entropy = await navigator.userAgentData.getHighEntropyValues(["model", "platform", "platformVersion"]);
                         if (entropy.model && entropy.model.trim() !== "") {
@@ -1186,12 +1399,9 @@
                             return `${entropy.platform} • ${br}`;
                         }
                     }
-                } catch (err) {
-                    // Fallback to UA string parser
-                }
+                } catch (err) {}
 
                 const ua = navigator.userAgent || "";
-                // Extract Android build model if present: e.g., "; Poco M7 Build/" or "; Pixel 8 Pro)"
                 const androidMatch = ua.match(/Android\s[\d.]+;\s*([^;)]+?)(?:\sBuild\/|\))/i);
                 if (androidMatch && androidMatch[1]) {
                     const model = androidMatch[1].trim();
@@ -1234,7 +1444,6 @@
             },
 
             async request(endpoint, method = "GET", body = null) {
-                // Always persist locally so the app works offline & immediately
                 saveLocalState();
 
                 if (!CONFIG.API_BASE_URL) {
@@ -1256,6 +1465,12 @@
 
             async saveProfile(profile) {
                 return this.request("/api/users/profile", "POST", profile);
+            },
+            async registerAccount(accountPayload) {
+                return this.request("/api/auth/register", "POST", accountPayload);
+            },
+            async loginAccount(loginPayload) {
+                return this.request("/api/auth/login", "POST", loginPayload);
             },
             async createEvent(eventObj) {
                 return this.request("/api/events", "POST", eventObj);
@@ -1281,12 +1496,41 @@
         };
 
         // ===================================================================
-        // CLEAN PRODUCTION STATE (Zero Pre-loaded Fake Demo Data)
+        // MULTI-USER ACCOUNT REGISTRY & SHARED EVENT STORAGE IN BROWSER
         // ===================================================================
+        function loadUsersDb() {
+            try {
+                const raw = localStorage.getItem(CONFIG.USERS_DB_KEY);
+                return raw ? JSON.parse(raw) : {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function saveUsersDb(db) {
+            try {
+                localStorage.setItem(CONFIG.USERS_DB_KEY, JSON.stringify(db));
+            } catch (e) {}
+        }
+
+        function loadSharedEventsDb() {
+            try {
+                const raw = localStorage.getItem(CONFIG.EVENTS_DB_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveSharedEventsDb(eventsList) {
+            try {
+                localStorage.setItem(CONFIG.EVENTS_DB_KEY, JSON.stringify(eventsList));
+            } catch (e) {}
+        }
+
         function getCleanInstalledState() {
             return {
-                // Null until the user completes the 1-step onboarding setup
-                userProfile: null, // { id, name, upi, pfp, deviceName, deviceId, createdAt }
+                userProfile: null, // { id, username, pin, name, upi, pfp, deviceName, deviceId, createdAt }
                 categories: [...DEFAULT_CATEGORIES],
                 activeEventId: null,
                 homeFilter: "ALL",
@@ -1296,7 +1540,7 @@
                 selectedCalDay: null,
                 calYear: 2026,
                 calMonth: 10, // 0-indexed (10 = November 2026)
-                events: [] // Clean array; user creates or joins events
+                events: []
             };
         }
 
@@ -1306,26 +1550,43 @@
         let modalSelectedCategory = "Food & Drinks";
         let modalParticipants = new Set();
         let pendingUpiTransfer = null;
+        let pendingInvitePayload = null;
         let onboardingTempPfp = DEFAULT_MONOLITH_PFP;
 
         function loadLocalState() {
+            const base = getCleanInstalledState();
             try {
                 const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
                 if (raw) {
                     const parsed = JSON.parse(raw);
-                    if (!parsed.categories || parsed.categories.length === 0) {
-                        parsed.categories = [...DEFAULT_CATEGORIES];
-                    }
-                    return parsed;
+                    Object.assign(base, parsed);
+                }
+                const sharedEvts = loadSharedEventsDb();
+                if (sharedEvts.length > 0) {
+                    base.events = sharedEvts;
+                }
+                const activeUsername = localStorage.getItem(CONFIG.SESSION_KEY);
+                const usersDb = loadUsersDb();
+                if (activeUsername && usersDb[activeUsername]) {
+                    base.userProfile = usersDb[activeUsername];
+                } else {
+                    base.userProfile = null;
                 }
             } catch (e) {
                 console.warn("Could not read localStorage:", e);
             }
-            return getCleanInstalledState();
+            return base;
         }
 
         function saveLocalState() {
             try {
+                if (state.userProfile && state.userProfile.username) {
+                    const usersDb = loadUsersDb();
+                    usersDb[state.userProfile.username] = state.userProfile;
+                    saveUsersDb(usersDb);
+                    localStorage.setItem(CONFIG.SESSION_KEY, state.userProfile.username);
+                }
+                saveSharedEventsDb(state.events || []);
                 localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state));
             } catch (e) {
                 console.warn("Could not save state:", e);
@@ -1333,11 +1594,22 @@
         }
 
         function getActiveEvent() {
-            if (!state.events || state.events.length === 0) return null;
-            return state.events.find(e => e.id === state.activeEventId) || state.events[0];
+            const myEvents = getVisibleEventsForCurrentUser();
+            if (myEvents.length === 0) return null;
+            return myEvents.find(e => e.id === state.activeEventId) || myEvents[0];
         }
 
-        // Lookup a participant's PFP or UPI across the current event or user profile
+        function getVisibleEventsForCurrentUser() {
+            if (!state.events) return [];
+            if (!state.userProfile) return state.events;
+            const me = state.userProfile.name;
+            return state.events.filter(e =>
+                (e.members && e.members.includes(me)) ||
+                e.createdByUserId === state.userProfile.id ||
+                e.createdByName === me
+            );
+        }
+
         function getMemberDetails(memberName, evt) {
             if (state.userProfile && state.userProfile.name.toLowerCase() === (memberName || "").toLowerCase()) {
                 return {
@@ -1357,6 +1629,16 @@
                     deviceName: mp.deviceName || "Member Device"
                 };
             }
+            const usersDb = loadUsersDb();
+            const foundUser = Object.values(usersDb).find(u => (u.name || "").toLowerCase() === (memberName || "").toLowerCase());
+            if (foundUser) {
+                return {
+                    name: foundUser.name,
+                    upi: foundUser.upi || "",
+                    pfp: foundUser.pfp || generateInitialsAvatar(memberName),
+                    deviceName: foundUser.deviceName || "Member Phone"
+                };
+            }
             return {
                 name: memberName,
                 upi: "",
@@ -1366,7 +1648,7 @@
         }
 
         // ===================================================================
-        // PFP UPLOAD & HTML5 CANVAS COMPRESSION (Works in Onboarding & Profile)
+        // PFP UPLOAD & HTML5 CANVAS COMPRESSION (Works in Auth & Profile)
         // ===================================================================
         window.triggerPfpUpload = function() {
             const fileInput = document.getElementById("globalPfpFileInput");
@@ -1384,7 +1666,6 @@
             reader.onload = function(e) {
                 const img = new Image();
                 img.onload = function() {
-                    // Center-crop and compress to 200x200 square JPEG DataURL so localStorage and API payloads stay fast
                     const canvas = document.createElement("canvas");
                     const size = 200;
                     canvas.width = size;
@@ -1404,7 +1685,6 @@
 
                     if (state.userProfile) {
                         state.userProfile.pfp = compressedDataUrl;
-                        // Also update user's PFP across any events and expenses they created
                         state.events.forEach(evt => {
                             if (evt.memberProfiles && evt.memberProfiles[state.userProfile.name]) {
                                 evt.memberProfiles[state.userProfile.name].pfp = compressedDataUrl;
@@ -1426,51 +1706,206 @@
         };
 
         // ===================================================================
-        // FIRST-TIME ONBOARDING SETUP & SHARED LINK AUTO-JOIN
+        // AUTHENTICATION (USERNAME + 4-DIGIT PIN) & INVITE LINK DETECTION
         // ===================================================================
-        function getInvitedEventCodeFromUrl() {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get("event")) return params.get("event");
-            const hash = window.location.hash || "";
-            if (hash.startsWith("#event=")) return decodeURIComponent(hash.replace("#event=", ""));
-            return null;
+        function parseInviteFromUrlOrString(rawInput) {
+            let searchStr = "";
+            if (typeof rawInput === "string" && rawInput.trim() !== "") {
+                const trimmed = rawInput.trim();
+                if (trimmed.includes("?")) {
+                    searchStr = trimmed.slice(trimmed.indexOf("?"));
+                } else if (trimmed.includes("#event=")) {
+                    const code = decodeURIComponent(trimmed.split("#event=")[1].split("&")[0]);
+                    return { code, title: null, by: null, at: null };
+                } else {
+                    return { code: trimmed, title: null, by: null, at: null };
+                }
+            } else {
+                searchStr = window.location.search;
+                if (!searchStr && (window.location.hash || "").startsWith("#event=")) {
+                    const code = decodeURIComponent(window.location.hash.replace("#event=", ""));
+                    return { code, title: null, by: null, at: null };
+                }
+            }
+
+            const params = new URLSearchParams(searchStr);
+            const code = params.get("event");
+            if (!code) return null;
+            return {
+                code,
+                title: params.get("title") || null,
+                by: params.get("by") || null,
+                at: params.get("at") || null
+            };
         }
 
+        window.switchAuthMode = function(mode) {
+            const loginView = document.getElementById("authView_LOGIN");
+            const signupView = document.getElementById("authView_SIGNUP");
+            const loginBtn = document.getElementById("authTabBtn_LOGIN");
+            const signupBtn = document.getElementById("authTabBtn_SIGNUP");
+
+            if (mode === "LOGIN") {
+                loginView.classList.remove("hidden");
+                signupView.classList.add("hidden");
+                loginBtn.className = "py-2.5 rounded-xl bg-[#24262d] text-white transition";
+                signupBtn.className = "py-2.5 rounded-xl text-[#8b8e96] hover:text-white transition";
+                renderSavedAccountsList();
+            } else {
+                loginView.classList.add("hidden");
+                signupView.classList.remove("hidden");
+                signupBtn.className = "py-2.5 rounded-xl bg-[#24262d] text-white transition";
+                loginBtn.className = "py-2.5 rounded-xl text-[#8b8e96] hover:text-white transition";
+            }
+        };
+
+        function renderSavedAccountsList() {
+            const usersDb = loadUsersDb();
+            const accounts = Object.values(usersDb);
+            const box = document.getElementById("savedAccountsBox");
+            const list = document.getElementById("savedAccountsList");
+            if (!box || !list) return;
+
+            if (accounts.length === 0) {
+                box.classList.add("hidden");
+                return;
+            }
+            box.classList.remove("hidden");
+            list.innerHTML = accounts.map(acc => `
+                <div onclick="prefillSavedAccount('${acc.username}')" class="p-2.5 rounded-xl bg-[#121316] border border-[#23252a] hover:border-fold-blue flex items-center justify-between cursor-pointer transition">
+                    <div class="flex items-center gap-2.5">
+                        <img src="${acc.pfp || DEFAULT_MONOLITH_PFP}" class="w-8 h-8 rounded-full object-cover">
+                        <div>
+                            <div class="text-xs font-bold text-white">${acc.name}</div>
+                            <div class="text-[11px] font-mono text-fold-blueText">@${acc.username}</div>
+                        </div>
+                    </div>
+                    <span class="text-[10px] font-mono px-2 py-1 rounded bg-black text-[#9ca3af]">Tap to Fill ▸</span>
+                </div>
+            `).join("");
+        }
+
+        window.prefillSavedAccount = function(username) {
+            document.getElementById("loginUsernameInput").value = username;
+            document.getElementById("loginPinInput").value = "";
+            document.getElementById("loginPinInput").focus();
+            showToast(`Enter 4-digit PIN for @${username}`);
+        };
+
         function checkOnboardingStatus() {
-            const inviteCode = getInvitedEventCodeFromUrl();
+            const invite = parseInviteFromUrlOrString();
             document.getElementById("onboardingPfpPreview").src = onboardingTempPfp;
             document.getElementById("onboardingDetectedDeviceName").textContent = DeviceIdentity.deviceName;
             document.getElementById("onboardingDetectedDeviceId").textContent = DeviceIdentity.deviceId;
 
-            if (inviteCode) {
+            if (invite && invite.code) {
+                pendingInvitePayload = invite;
                 document.getElementById("onboardingInviteBanner").classList.remove("hidden");
-                document.getElementById("onboardingInviteCodeText").textContent = `Event Code: ${inviteCode}`;
+                document.getElementById("onboardingInviteTitleText").textContent =
+                    invite.title ? `Invited to "${invite.title}"` : `Event Code: ${invite.code}`;
+                document.getElementById("onboardingInviteCodeText").textContent =
+                    invite.by ? `Created by ${invite.by} • ${invite.at || 'Recently'}` : `Log in or create account to swipe & join`;
             }
 
+            const usersDb = loadUsersDb();
+            const hasSavedUsers = Object.keys(usersDb).length > 0;
+
             if (!state.userProfile) {
-                document.getElementById("onboardingScreen").classList.remove("hidden");
+                document.getElementById("authScreen").classList.remove("hidden");
+                switchAuthMode(hasSavedUsers ? "LOGIN" : "SIGNUP");
             } else {
-                // Keep deviceName synced with hardware extraction
                 state.userProfile.deviceName = DeviceIdentity.deviceName;
                 state.userProfile.deviceId = DeviceIdentity.deviceId;
-                document.getElementById("onboardingScreen").classList.add("hidden");
-                handleInviteCodeAutoJoin(inviteCode);
+                document.getElementById("authScreen").classList.add("hidden");
+                if (pendingInvitePayload) {
+                    checkAndShowSwipeJoinOverlay(pendingInvitePayload);
+                }
             }
         }
 
+        window.handleLoginSubmit = async function() {
+            const rawUsername = (document.getElementById("loginUsernameInput").value || "").trim().toLowerCase().replace(/^@/, "");
+            const rawPin = (document.getElementById("loginPinInput").value || "").trim();
+
+            if (!rawUsername) {
+                showToast("Enter your username", "error");
+                return;
+            }
+            if (!/^\d{4}$/.test(rawPin)) {
+                showToast("Enter your 4-digit numeric PIN", "error");
+                return;
+            }
+
+            const usersDb = loadUsersDb();
+            const account = usersDb[rawUsername];
+            if (!account) {
+                showToast(`No account found for @${rawUsername}. Create an account first.`, "error");
+                return;
+            }
+            if (account.pin !== rawPin) {
+                showToast("Incorrect 4-digit PIN", "error");
+                return;
+            }
+
+            account.deviceName = DeviceIdentity.deviceName;
+            account.deviceId = DeviceIdentity.deviceId;
+            state.userProfile = account;
+            saveLocalState();
+
+            await ApiService.loginAccount({
+                username: rawUsername,
+                pin: rawPin,
+                deviceId: DeviceIdentity.deviceId,
+                deviceName: DeviceIdentity.deviceName
+            });
+
+            document.getElementById("authScreen").classList.add("hidden");
+            const myEvts = getVisibleEventsForCurrentUser();
+            state.activeEventId = myEvts[0]?.id || null;
+
+            renderAll();
+            showToast(`Logged in as ${account.name} (@${account.username})`);
+
+            if (pendingInvitePayload) {
+                checkAndShowSwipeJoinOverlay(pendingInvitePayload);
+            }
+        };
+
         window.completeOnboardingSetup = async function() {
+            const rawUsername = (document.getElementById("signupUsernameInput").value || "").trim().toLowerCase().replace(/^@/, "");
+            const rawPin = (document.getElementById("signupPinInput").value || "").trim();
             const nameRaw = (document.getElementById("onboardingNameInput").value || "").trim();
             const upiRaw = (document.getElementById("onboardingUpiInput").value || "").trim();
 
+            if (!rawUsername || !/^[a-z0-9_.-]{2,20}$/.test(rawUsername)) {
+                showToast("Enter a valid unique username (letters/numbers)", "error");
+                document.getElementById("signupUsernameInput").focus();
+                return;
+            }
+            if (!/^\d{4}$/.test(rawPin)) {
+                showToast("PIN must be exactly 4 digits (e.g. 1234)", "error");
+                document.getElementById("signupPinInput").focus();
+                return;
+            }
             if (!nameRaw) {
-                showToast("Please enter your name to continue", "error");
+                showToast("Please enter your display name", "error");
                 document.getElementById("onboardingNameInput").focus();
+                return;
+            }
+
+            const usersDb = loadUsersDb();
+            if (usersDb[rawUsername]) {
+                showToast(`Username @${rawUsername} is already taken. Log in instead.`, "error");
+                switchAuthMode("LOGIN");
+                document.getElementById("loginUsernameInput").value = rawUsername;
                 return;
             }
 
             const cleanName = nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1);
             const newProfile = {
-                id: "usr_" + DeviceIdentity.deviceId.replace(/[^A-Z0-9]/gi, "").toLowerCase(),
+                id: "usr_" + rawUsername + "_" + Date.now().toString(36),
+                username: rawUsername,
+                pin: rawPin,
                 name: cleanName,
                 upi: upiRaw,
                 pfp: onboardingTempPfp || DEFAULT_MONOLITH_PFP,
@@ -1479,32 +1914,130 @@
                 createdAt: new Date().toISOString()
             };
 
+            usersDb[rawUsername] = newProfile;
+            saveUsersDb(usersDb);
             state.userProfile = newProfile;
-            await ApiService.saveProfile(newProfile);
+            saveLocalState();
 
-            const inviteCode = getInvitedEventCodeFromUrl();
-            handleInviteCodeAutoJoin(inviteCode);
+            await ApiService.registerAccount(newProfile);
 
-            document.getElementById("onboardingScreen").classList.add("hidden");
+            document.getElementById("authScreen").classList.add("hidden");
             renderAll();
-            showToast(`Welcome, ${cleanName}! Device linked: ${DeviceIdentity.deviceName}`);
+            showToast(`Account @${rawUsername} created!`);
+
+            if (pendingInvitePayload) {
+                checkAndShowSwipeJoinOverlay(pendingInvitePayload);
+            }
         };
 
-        function handleInviteCodeAutoJoin(inviteCode) {
-            if (!inviteCode || !state.userProfile) return;
+        window.logoutCurrentUser = function() {
+            localStorage.removeItem(CONFIG.SESSION_KEY);
+            state.userProfile = null;
+            closeProfileOverlay();
+            document.getElementById("loginPinInput").value = "";
+            document.getElementById("authScreen").classList.remove("hidden");
+            switchAuthMode("LOGIN");
+            showToast("Logged out safely");
+        };
+
+        // ===================================================================
+        // SWIPE-TO-APPROVE EVENT INVITE LOGIC
+        // ===================================================================
+        function checkAndShowSwipeJoinOverlay(inviteObj, forcePreview = false) {
+            if (!inviteObj || !inviteObj.code || !state.userProfile) return;
             const me = state.userProfile;
-            let existingEvt = state.events.find(e => e.code.toLowerCase() === inviteCode.toLowerCase());
 
+            let existingEvt = state.events.find(e => e.code.toLowerCase() === inviteObj.code.toLowerCase());
+            if (existingEvt && existingEvt.members.includes(me.name) && !forcePreview) {
+                state.activeEventId = existingEvt.id;
+                pendingInvitePayload = null;
+                saveLocalState();
+                renderAll();
+                return;
+            }
+
+            const eventTitle = existingEvt
+                ? existingEvt.name
+                : (inviteObj.title || inviteObj.code.replace(/-\d+$/, "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "Shared Event");
+
+            const creatorName = existingEvt
+                ? (existingEvt.createdByName || existingEvt.members[0] || "Friend")
+                : (inviteObj.by || "Event Organizer");
+
+            const createdWhen = existingEvt
+                ? (existingEvt.createdAtFormatted || existingEvt.dateStr)
+                : (inviteObj.at || "Today");
+
+            const creatorDetails = getMemberDetails(creatorName, existingEvt);
+
+            document.getElementById("swipeJoinEventIcon").textContent = eventTitle.charAt(0).toUpperCase();
+            document.getElementById("swipeJoinEventName").textContent = eventTitle;
+            document.getElementById("swipeJoinCreatorName").textContent = creatorName;
+            document.getElementById("swipeJoinCreatorPfp").src = creatorDetails.pfp;
+            document.getElementById("swipeJoinCreatedWhen").textContent = createdWhen;
+            document.getElementById("swipeJoinUserBadge").textContent = `${me.name} (@${me.username})`;
+            document.getElementById("swipeJoinDeviceBadge").textContent = me.deviceName;
+
+            pendingInvitePayload = {
+                code: inviteObj.code,
+                title: eventTitle,
+                by: creatorName,
+                at: createdWhen
+            };
+
+            resetSwipeSliderPosition();
+            document.getElementById("swipeJoinOverlay").classList.remove("hidden");
+        }
+
+        window.previewSwipeJoinForCurrentEvent = function() {
+            const evt = getActiveEvent();
+            if (!evt) return;
+            closeShareAndPeopleModal();
+            checkAndShowSwipeJoinOverlay({
+                code: evt.code,
+                title: evt.name,
+                by: evt.createdByName || evt.members[0] || state.userProfile.name,
+                at: evt.createdAtFormatted || evt.dateStr
+            }, true);
+        };
+
+        window.triggerJoinFromPastedLink = function() {
+            const inp = document.getElementById("joinInviteLinkInput");
+            const val = (inp.value || "").trim();
+            if (!val) {
+                showToast("Paste an invite link or event code first", "error");
+                return;
+            }
+            const parsed = parseInviteFromUrlOrString(val);
+            if (!parsed || !parsed.code) {
+                showToast("Could not detect a valid event code", "error");
+                return;
+            }
+            inp.value = "";
+            closeShareAndPeopleModal();
+            checkAndShowSwipeJoinOverlay(parsed, true);
+        };
+
+        window.declineSwipeJoin = function() {
+            pendingInvitePayload = null;
+            document.getElementById("swipeJoinOverlay").classList.add("hidden");
+            showToast("Invite dismissed");
+        };
+
+        async function approveJoinEvent() {
+            if (!pendingInvitePayload || !state.userProfile) return;
+            const me = state.userProfile;
+            const { code, title, by, at } = pendingInvitePayload;
+
+            let existingEvt = state.events.find(e => e.code.toLowerCase() === code.toLowerCase());
             if (!existingEvt) {
-                // Create the shared event room locally if joining via URL link on a fresh browser
-                const prettyTitle = inviteCode
-                    .replace(/-\d+$/, "")
-                    .split("-")
-                    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-                    .join(" ") || "Shared Event";
-
                 const now = new Date();
-                existingEvt = createEventObject(prettyTitle, now.toISOString().slice(0, 10), inviteCode);
+                existingEvt = createEventObject(title || "Shared Event", now.toISOString().slice(0, 10), code);
+                existingEvt.createdByName = by || me.name;
+                existingEvt.createdAtFormatted = at || existingEvt.createdAtFormatted;
+                if (by && !existingEvt.members.includes(by)) {
+                    existingEvt.members.unshift(by);
+                }
                 state.events.unshift(existingEvt);
             }
 
@@ -1521,7 +2054,85 @@
             };
 
             state.activeEventId = existingEvt.id;
-            ApiService.addParticipant(existingEvt.id, existingEvt.memberProfiles[me.name]);
+            pendingInvitePayload = null;
+            saveLocalState();
+
+            await ApiService.addParticipant(existingEvt.id, existingEvt.memberProfiles[me.name]);
+
+            document.getElementById("swipeJoinOverlay").classList.add("hidden");
+            renderAll();
+            showToast(`Approved & joined "${existingEvt.name}"!`);
+        }
+
+        function initSwipeToApproveSlider() {
+            const track = document.getElementById("swipeTrack");
+            const thumb = document.getElementById("swipeThumb");
+            const fill = document.getElementById("swipeFill");
+            if (!track || !thumb || !fill) return;
+
+            let isDragging = false;
+            let startX = 0;
+            let currentX = 0;
+
+            function getMaxDrag() {
+                return Math.max(10, track.clientWidth - thumb.clientWidth - 8);
+            }
+
+            function onStart(clientX) {
+                isDragging = true;
+                startX = clientX - currentX;
+                thumb.style.transition = "none";
+                fill.style.transition = "none";
+            }
+
+            function onMove(clientX) {
+                if (!isDragging) return;
+                const maxDrag = getMaxDrag();
+                currentX = Math.max(0, Math.min(maxDrag, clientX - startX));
+                thumb.style.transform = `translateX(${currentX}px)`;
+                const pct = ((currentX + thumb.clientWidth / 2) / track.clientWidth) * 100;
+                fill.style.width = `${Math.min(100, pct)}%`;
+            }
+
+            function onEnd() {
+                if (!isDragging) return;
+                isDragging = false;
+                const maxDrag = getMaxDrag();
+                if (currentX >= maxDrag * 0.82) {
+                    currentX = maxDrag;
+                    thumb.style.transform = `translateX(${maxDrag}px)`;
+                    fill.style.width = "100%";
+                    thumb.innerHTML = `<i class="fa-solid fa-check"></i>`;
+                    setTimeout(() => {
+                        approveJoinEvent();
+                    }, 180);
+                } else {
+                    resetSwipeSliderPosition();
+                }
+            }
+
+            thumb.addEventListener("mousedown", e => onStart(e.clientX));
+            window.addEventListener("mousemove", e => onMove(e.clientX));
+            window.addEventListener("mouseup", onEnd);
+
+            thumb.addEventListener("touchstart", e => {
+                if (e.touches[0]) onStart(e.touches[0].clientX);
+            }, { passive: true });
+            window.addEventListener("touchmove", e => {
+                if (isDragging && e.touches[0]) onMove(e.touches[0].clientX);
+            }, { passive: true });
+            window.addEventListener("touchend", onEnd);
+        }
+
+        function resetSwipeSliderPosition() {
+            const thumb = document.getElementById("swipeThumb");
+            const fill = document.getElementById("swipeFill");
+            if (!thumb || !fill) return;
+            thumb.style.transition = "transform 0.25s ease";
+            fill.style.transition = "width 0.25s ease";
+            thumb.style.transform = "translateX(0px)";
+            fill.style.width = "0%";
+            thumb.innerHTML = `<i class="fa-solid fa-arrow-right"></i>`;
         }
 
         // ===================================================================
@@ -1582,14 +2193,12 @@
                 stats[m].net = stats[m].paid - stats[m].share;
             });
 
-            // Account for already settled transfers
             (evt.settledTransfers || []).forEach(st => {
                 const amt = Number(st.amount) || 0;
                 if (stats[st.from]) stats[st.from].net += amt;
                 if (stats[st.to]) stats[st.to].net -= amt;
             });
 
-            // Min-Cash-Flow Debt Simplification
             const debtors = [];
             const creditors = [];
             Object.keys(stats).forEach(m => {
@@ -1637,7 +2246,7 @@
             let totalSpent = 0;
             let totalGotBack = 0;
 
-            state.events.forEach(evt => {
+            getVisibleEventsForCurrentUser().forEach(evt => {
                 const fin = computeEventFinancials(evt);
                 const myStat = fin.stats[me];
                 if (myStat) {
@@ -1666,14 +2275,13 @@
         }
 
         // -------------------------------------------------------------------
-        // 1. RENDER HOME TAB (Fold 1 & Fold 2 UI + Category Bars + PFP Circles)
+        // 1. RENDER HOME TAB (Hidden URL Event Name + Per-Person Color Bar Chart)
         // -------------------------------------------------------------------
         function renderHomeTab() {
             const me = state.userProfile;
             const evt = getActiveEvent();
             const fin = computeEventFinancials(evt);
 
-            // Profile Header on Home
             document.getElementById("homeProfileAvatarImg").src = me.pfp || DEFAULT_MONOLITH_PFP;
             document.getElementById("homeProfileName").textContent = me.name;
 
@@ -1681,15 +2289,19 @@
                 document.getElementById("homeTopEventName").textContent = "Create Event";
                 document.getElementById("homeTopPeopleCount").textContent = "(1)";
                 document.getElementById("homeProfileSubtitle").textContent = "Create your first event link";
-                document.getElementById("homeShareLinkText").textContent = "Tap '+ Event' to start an event link";
+                document.getElementById("homeShareLinkText").textContent = "No active event — Tap + Event";
                 document.getElementById("homeTotalSpendWhole").textContent = "0";
                 document.getElementById("homeUpiCashSplitText").textContent = "UPI ₹0 • Cash ₹0";
+                document.getElementById("homePeopleMiniColumns").innerHTML = "";
+                document.getElementById("homePeopleSpendBarChart").innerHTML = `
+                    <div class="text-xs text-[#686b73] py-1">Create an event & add expenses to see who spent how much.</div>
+                `;
                 document.getElementById("homeSpendingDateLabel").textContent = "NO ACTIVE EVENT";
                 document.getElementById("homeParticipantAvatarsRow").innerHTML = "";
                 document.getElementById("homeCategoryBarsList").innerHTML = `
                     <div class="p-6 text-center space-y-3">
                         <div class="text-sm font-semibold text-white">No Event Created Yet</div>
-                        <p class="text-xs text-[#8b8e96]">Create an event for your outing, share the web link with friends, and track everyone's spends in one place.</p>
+                        <p class="text-xs text-[#8b8e96]">Create an event for your outing, share the invite link with friends, and track everyone's spends in one place.</p>
                         <button onclick="openCreateEventModal()" class="px-4 py-2.5 rounded-xl bg-fold-blue text-black font-extrabold text-xs">
                             + Create First Event Link
                         </button>
@@ -1700,22 +2312,21 @@
                 return;
             }
 
-            // Event Top Bar & Share Link
             document.getElementById("homeTopEventName").textContent = evt.name;
             document.getElementById("homeTopPeopleCount").textContent = `(${evt.members.length})`;
-            document.getElementById("homeShareLinkText").textContent = `${window.location.host || 'foldsplit.app'}/?event=${evt.code}`;
+            document.getElementById("homeShareLinkText").textContent = `${evt.name} • ${evt.members.length} member${evt.members.length === 1 ? '' : 's'}`;
 
             const pendingCount = fin.transfers.length;
             document.getElementById("homeProfileSubtitle").textContent =
                 pendingCount > 0 ? `${pendingCount} pending settlement${pendingCount > 1 ? 's' : ''}` : `All splits settled`;
 
-            // Total Spend Card
             document.getElementById("homeTotalSpendWhole").textContent = Math.floor(fin.totalSpend).toLocaleString("en-IN");
             document.getElementById("homeTotalSpendDec").textContent = ".00";
             document.getElementById("homeUpiCashSplitText").textContent =
                 `UPI ₹${fin.upiSpend.toLocaleString("en-IN")} • Cash ₹${fin.cashSpend.toLocaleString("en-IN")}`;
 
-            // Spending Summary Header & Filter Circles
+            renderPeopleSpendBarChart(evt, fin);
+
             document.getElementById("homeSpendingDateLabel").textContent = evt.dateStr.toUpperCase();
             ["ALL", "UPI", "Cash"].forEach(f => {
                 const btn = document.getElementById(`homeFilter_${f}`);
@@ -1725,19 +2336,18 @@
                     : "w-8 h-8 rounded-full border border-[#262930] bg-[#0c0d10] text-[10px] font-bold text-[#9ca3af] flex items-center justify-center transition";
             });
 
-            // Participant PFP Circles Row (Matches circular badges row in fold 2.jpeg)
             const avatarsRow = document.getElementById("homeParticipantAvatarsRow");
             avatarsRow.innerHTML = evt.members.map(mName => {
                 const det = getMemberDetails(mName, evt);
+                const pColor = getPersonColor(mName, evt);
                 return `
                     <div class="flex items-center gap-1.5 pr-2.5 py-1 pl-1 rounded-full bg-[#0c0d10] border border-[#262930] shrink-0" title="${mName}">
-                        <img src="${det.pfp}" alt="${mName}" class="w-7 h-7 rounded-full object-cover">
+                        <img src="${det.pfp}" alt="${mName}" class="w-7 h-7 rounded-full object-cover" style="border: 2px solid ${pColor}">
                         <span class="text-xs font-medium text-[#d1d5db]">${mName}</span>
                     </div>
                 `;
             }).join("");
 
-            // Category Proportional Bars (Exact Fold 2 style: Shopping -₹828, Food & Drinks -₹209)
             const catEntries = Object.entries(fin.categoryTotals).sort((a, b) => b[1] - a[1]);
             const maxCatAmt = Math.max(...catEntries.map(c => c[1]), 1);
             const catBarsEl = document.getElementById("homeCategoryBarsList");
@@ -1764,7 +2374,6 @@
                 }).join("");
             }
 
-            // Detailed Expense Items Below Category Summary
             let filteredExp = [...(evt.expenses || [])];
             if (state.homeFilter === "UPI") filteredExp = filteredExp.filter(e => e.method === "UPI");
             if (state.homeFilter === "Cash") filteredExp = filteredExp.filter(e => e.method === "Cash");
@@ -1779,12 +2388,13 @@
                 listEl.innerHTML = filteredExp.map(exp => {
                     const perPerson = Math.round((exp.amount / Math.max(1, exp.participants.length)) * 10) / 10;
                     const creatorPfp = exp.createdByPfp || getMemberDetails(exp.createdBy, evt).pfp;
+                    const payerColor = getPersonColor(exp.paidBy, evt);
 
                     return `
                         <div class="p-3.5 rounded-2xl bg-[#16181d] border border-[#23262e] space-y-2.5 transition">
                             <div class="flex items-center justify-between gap-2">
                                 <div class="flex items-center gap-2.5 min-w-0">
-                                    <img src="${creatorPfp}" alt="${exp.createdBy}" class="w-8 h-8 rounded-full object-cover border border-[#2e323c] shrink-0">
+                                    <img src="${creatorPfp}" alt="${exp.createdBy}" class="w-8 h-8 rounded-full object-cover shrink-0" style="border: 2px solid ${payerColor}">
                                     <div class="min-w-0">
                                         <div class="flex items-center gap-2">
                                             <span class="text-[15px] font-semibold text-white truncate">${exp.title}</span>
@@ -1801,10 +2411,10 @@
                                 </div>
                             </div>
 
-                            <!-- Paid By & Participants Row -->
                             <div class="pt-2 border-t border-[#22252c] flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                                <div class="text-[#9ca3af]">
-                                    Paid by <strong class="text-white">${exp.paidBy}</strong> • ₹${perPerson}/person
+                                <div class="text-[#9ca3af] flex items-center gap-1.5">
+                                    <span class="w-2 h-2 rounded-full" style="background-color: ${payerColor}"></span>
+                                    <span>Paid by <strong class="text-white">${exp.paidBy}</strong> • ₹${perPerson}/person</span>
                                 </div>
                                 <div class="flex items-center gap-1.5">
                                     <button onclick="toggleExpenseCleared('${evt.id}', '${exp.id}')" class="px-2 py-0.5 rounded-md font-semibold ${
@@ -1818,7 +2428,6 @@
                                 </div>
                             </div>
 
-                            <!-- Participant Chips -->
                             <div class="flex flex-wrap items-center gap-1">
                                 <span class="text-[10px] text-[#787b84] mr-1">Participants (${exp.participants.length}):</span>
                                 ${evt.members.map(m => {
@@ -1834,6 +2443,50 @@
             }
 
             renderHomeSettlementsSection(evt, fin);
+        }
+
+        function renderPeopleSpendBarChart(evt, fin) {
+            const miniColsEl = document.getElementById("homePeopleMiniColumns");
+            const chartEl = document.getElementById("homePeopleSpendBarChart");
+            if (!miniColsEl || !chartEl || !evt) return;
+
+            const memberSpends = (evt.members || []).map(m => {
+                const paid = fin.stats[m] ? fin.stats[m].paid : 0;
+                const color = getPersonColor(m, evt);
+                return { name: m, paid, color };
+            });
+
+            const maxPaid = Math.max(...memberSpends.map(x => x.paid), 1);
+
+            miniColsEl.innerHTML = memberSpends.map(item => {
+                const heightPct = fin.totalSpend > 0 ? Math.max(14, Math.round((item.paid / maxPaid) * 100)) : 14;
+                return `
+                    <div class="flex flex-col items-center justify-end h-full flex-1 max-w-[26px]" title="${item.name}: ₹${Math.round(item.paid)}">
+                        <div class="w-full rounded-t-md transition-all duration-300" style="height: ${heightPct}%; background-color: ${item.color}; opacity: ${item.paid > 0 ? 1 : 0.25}"></div>
+                        <span class="text-[9px] font-bold text-[#9ca3af] mt-1 truncate max-w-full">${item.name.slice(0, 3)}</span>
+                    </div>
+                `;
+            }).join("");
+
+            chartEl.innerHTML = memberSpends.map(item => {
+                const pctOfTotal = fin.totalSpend > 0 ? Math.round((item.paid / fin.totalSpend) * 100) : 0;
+                const barWidth = fin.totalSpend > 0 ? Math.max(6, Math.round((item.paid / maxPaid) * 100)) : 4;
+                return `
+                    <div class="space-y-1">
+                        <div class="flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${item.color}"></span>
+                                <span class="font-semibold text-[#e5e7eb] truncate">${item.name}</span>
+                                <span class="text-[10px] font-mono text-[#787b84]">${pctOfTotal}%</span>
+                            </div>
+                            <span class="font-bold text-white tabular-nums">₹${Math.round(item.paid).toLocaleString("en-IN")}</span>
+                        </div>
+                        <div class="w-full h-2 rounded-full bg-[#1a1c22] overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-300" style="width: ${barWidth}%; background-color: ${item.color}; opacity: ${item.paid > 0 ? 1 : 0.25}"></div>
+                        </div>
+                    </div>
+                `;
+            }).join("");
         }
 
         function renderHomeSettlementsSection(evt, fin) {
@@ -1871,14 +2524,14 @@
                                 <img src="${recInfo.pfp}" class="w-8 h-8 rounded-full object-cover">
                                 <div>
                                     <div class="text-xs font-semibold text-white">Pay <span class="text-fold-red">${t.to}</span></div>
-                                    <div class="text-[11px] font-mono text-[#787b84]">${recInfo.upi || 'UPI / Cash'}</div>
+                                    <div class="text-[11px] font-mono text-[#787b84]">${recInfo.upi || 'Scan UPI QR'}</div>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
                                 <span class="text-sm font-bold text-white tabular-nums">₹${t.amount}</span>
                                 <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-3 py-1.5 rounded-xl bg-fold-blue text-black font-extrabold text-xs flex items-center gap-1 active:scale-95 transition">
-                                    <span>Pay UPI</span>
-                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                                    <i class="fa-solid fa-qrcode text-[11px]"></i>
+                                    <span>UPI QR</span>
                                 </button>
                             </div>
                         </div>
@@ -1898,13 +2551,14 @@
                                 <img src="${fromInfo.pfp}" class="w-8 h-8 rounded-full object-cover">
                                 <div>
                                     <div class="text-xs font-semibold text-white">Get back from <span class="text-fold-green">${t.from}</span></div>
-                                    <div class="text-[11px] text-[#787b84]">Owes you for this event</div>
+                                    <div class="text-[11px] text-[#787b84]">Show your UPI QR to collect</div>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
                                 <span class="text-sm font-bold text-fold-green tabular-nums">+₹${t.amount}</span>
-                                <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-2.5 py-1 rounded-lg bg-[#23262e] text-xs font-semibold text-white">
-                                    Settle
+                                <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-2.5 py-1.5 rounded-lg bg-[#23262e] hover:bg-[#2c303a] text-xs font-semibold text-white flex items-center gap-1">
+                                    <i class="fa-solid fa-qrcode text-[10px] text-fold-blueText"></i>
+                                    <span>Show QR</span>
                                 </button>
                             </div>
                         </div>
@@ -1925,8 +2579,9 @@
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="font-bold text-white tabular-nums">₹${t.amount}</span>
-                            <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-2 py-0.5 rounded bg-fold-navyPill text-fold-blueText text-[11px] font-bold">
-                                Pay ↗
+                            <button onclick="openUpiRedirectModal('${t.from}', '${t.to}', ${t.amount})" class="px-2.5 py-1 rounded bg-fold-navyPill text-fold-blueText text-[11px] font-bold flex items-center gap-1">
+                                <i class="fa-solid fa-qrcode text-[10px]"></i>
+                                <span>QR</span>
                             </button>
                         </div>
                     </div>
@@ -1950,7 +2605,7 @@
             const query = (document.getElementById("txSearchInput")?.value || "").trim().toLowerCase();
 
             const allItems = [];
-            state.events.forEach(evt => {
+            getVisibleEventsForCurrentUser().forEach(evt => {
                 (evt.expenses || []).forEach(exp => {
                     allItems.push({
                         evtId: evt.id,
@@ -1991,7 +2646,6 @@
                 const creatorPfp = exp.createdByPfp || getMemberDetails(exp.createdBy, evt).pfp;
                 return `
                     <div class="fold-card p-4 space-y-3">
-                        <!-- Top Row: Title & Creator+Device on Left, Timestamp on Right (Exact Fold 3 layout) -->
                         <div class="flex items-start justify-between pb-2.5 border-b border-[#202228] gap-2">
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2">
@@ -2005,7 +2659,6 @@
                             <span class="text-[13px] text-[#787b84] shrink-0">${exp.timeStr || ''}</span>
                         </div>
 
-                        <!-- Bottom Row: Bold -₹Amount on Left, Category Pill + Clear Status Pill + Creator Circular PFP on Right (Matches fold 3.jpeg) -->
                         <div class="flex items-center justify-between pt-0.5">
                             <div class="tabular-nums flex items-baseline">
                                 <span class="text-sm text-[#787b84] mr-1">-</span>
@@ -2014,13 +2667,11 @@
                             </div>
 
                             <div class="flex items-center gap-2">
-                                <!-- Category Tag Pill (Matches DONATION / TAG pill in fold 3.jpeg) -->
                                 <span class="px-3 py-1.5 rounded-full bg-[#090a0c] border border-[#23262e] text-[11px] font-bold tracking-wider uppercase text-[#e5e7eb] flex items-center gap-1.5">
                                     <i class="fa-solid fa-tag text-[10px] text-fold-blueText"></i>
                                     <span>${exp.category || 'EXPENSE'}</span>
                                 </span>
 
-                                <!-- Cleared / Unclear Toggle Pill -->
                                 <button onclick="toggleExpenseCleared('${evtId}', '${exp.id}')" class="px-3 py-1.5 rounded-full border text-[11px] font-bold tracking-wider uppercase transition ${
                                     exp.cleared
                                         ? 'bg-[#0b1f15] border-fold-green/40 text-fold-green'
@@ -2029,7 +2680,6 @@
                                     ${exp.cleared ? '✓ CLEAR' : 'UNCLEAR'}
                                 </button>
 
-                                <!-- Creator's Circular Profile Picture (Exact position of circular badge in fold 3.jpeg) -->
                                 <img src="${creatorPfp}" alt="${exp.createdBy}" title="Added by ${exp.createdBy} (${exp.deviceUsed})" class="w-7 h-7 rounded-full object-cover border border-[#323640] shrink-0">
                             </div>
                         </div>
@@ -2044,12 +2694,13 @@
         function renderEventsTab() {
             let grandTotal = 0;
             const listEl = document.getElementById("eventsPortfolioList");
+            const visibleEvents = getVisibleEventsForCurrentUser();
 
-            if (state.events.length === 0) {
+            if (visibleEvents.length === 0) {
                 listEl.innerHTML = `
                     <div class="fold-card p-6 text-center space-y-2">
                         <div class="text-sm font-semibold text-white">No Events Created Yet</div>
-                        <p class="text-xs text-[#787b84]">Tap "Create New Event Link" below to start tracking an outing with friends.</p>
+                        <p class="text-xs text-[#787b84]">Tap "Create or Join Event Link" below to start tracking an outing with friends.</p>
                     </div>
                 `;
                 document.getElementById("eventsGrandTotalValue").textContent = "₹0";
@@ -2057,7 +2708,7 @@
                 return;
             }
 
-            listEl.innerHTML = state.events.map(evt => {
+            listEl.innerHTML = visibleEvents.map(evt => {
                 const fin = computeEventFinancials(evt);
                 grandTotal += fin.totalSpend;
                 const isActive = evt.id === state.activeEventId;
@@ -2092,7 +2743,7 @@
             }).join("");
 
             document.getElementById("eventsGrandTotalValue").textContent = `₹${grandTotal.toLocaleString("en-IN")}`;
-            document.getElementById("eventsBottomSyncStatus").textContent = `${state.events.length} EVENT${state.events.length === 1 ? '' : 'S'} • AUTO-SYNC ACTIVE`;
+            document.getElementById("eventsBottomSyncStatus").textContent = `${visibleEvents.length} EVENT${visibleEvents.length === 1 ? '' : 'S'} • AUTO-SYNC ACTIVE`;
         }
 
         // -------------------------------------------------------------------
@@ -2109,12 +2760,13 @@
             const daysInMonth = new Date(yr, mo + 1, 0).getDate();
             const firstDayOfWeek = new Date(yr, mo, 1).getDay();
 
+            const visibleEvents = getVisibleEventsForCurrentUser();
             const dayEventMap = {};
             let totalClearedEvents = 0;
             let unclearSpend = 0;
             let clearedSpend = 0;
 
-            state.events.forEach(evt => {
+            visibleEvents.forEach(evt => {
                 const fin = computeEventFinancials(evt);
                 if (fin.unclearCount === 0 && (evt.expenses || []).length > 0) totalClearedEvents++;
 
@@ -2129,9 +2781,9 @@
                 }
             });
 
-            document.getElementById("calClearedRatioText").textContent = `Cleared ${totalClearedEvents} / ${state.events.length}`;
+            document.getElementById("calClearedRatioText").textContent = `Cleared ${totalClearedEvents} / ${visibleEvents.length}`;
             document.getElementById("calMetricUnclear").textContent = `₹${unclearSpend.toLocaleString("en-IN")}`;
-            document.getElementById("calMetricEventsCount").textContent = `${state.events.length}`;
+            document.getElementById("calMetricEventsCount").textContent = `${visibleEvents.length}`;
             document.getElementById("calMetricCleared").textContent = `₹${clearedSpend.toLocaleString("en-IN")}`;
 
             let cellsHtml = "";
@@ -2178,7 +2830,7 @@
                     : "py-2 rounded-xl text-[#8b8e96] hover:text-white";
             });
 
-            let drawerEvents = [...state.events];
+            let drawerEvents = [...visibleEvents];
             if (state.selectedCalDay && dayEventMap[state.selectedCalDay]) {
                 drawerEvents = [dayEventMap[state.selectedCalDay].evt];
             } else if (state.calFilter === "UNCLEAR") {
@@ -2245,6 +2897,7 @@
             document.getElementById("profileOverlayDeviceBadge").textContent = me.deviceName.toUpperCase();
             document.getElementById("profileOverlayUpiPill").textContent = me.upi ? `@${me.upi}` : "@add_upi_id";
             document.getElementById("profileOverlayNameSub").textContent = me.name.toUpperCase();
+            document.getElementById("profileLoggedUsername").textContent = `@${me.username || me.name.toLowerCase()}`;
 
             document.getElementById("profileNameInput").value = me.name;
             document.getElementById("profileUpiInput").value = me.upi || "";
@@ -2271,7 +2924,6 @@
             me.name = newName;
             me.upi = newUpiRaw;
 
-            // Update references in user's events if name or UPI changed
             state.events.forEach(evt => {
                 const idx = evt.members.indexOf(oldName);
                 if (idx !== -1) evt.members[idx] = newName;
@@ -2547,7 +3199,6 @@
             const ampm = hours >= 12 ? "PM" : "AM";
             const hr12 = hours % 12 || 12;
 
-            // Silent background attachment of creator & hardware device metadata for backend redundancy
             const newExpense = {
                 id: "exp_" + Date.now(),
                 eventId: evt.id,
@@ -2575,23 +3226,94 @@
         };
 
         // ===================================================================
-        // DIRECT UPI REDIRECT PAYMENT WINDOW
+        // SCANNABLE UPI QR CODE GENERATOR & SETTLEMENT WINDOW
         // ===================================================================
+        function renderUpiQrToCanvas(upiUri) {
+            const canvas = document.getElementById("upiQrCanvas");
+            if (!canvas) return;
+
+            if (typeof QRious !== "undefined") {
+                new QRious({
+                    element: canvas,
+                    value: upiUri,
+                    size: 190,
+                    level: "M",
+                    background: "#ffffff",
+                    foreground: "#000000",
+                    padding: 8
+                });
+            } else {
+                const ctx = canvas.getContext("2d");
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, 190, 190);
+                ctx.fillStyle = "#000000";
+                const cells = 21;
+                const cellSize = Math.floor(170 / cells);
+                const offset = 10;
+                let seed = 0;
+                for (let i = 0; i < upiUri.length; i++) seed = (seed * 31 + upiUri.charCodeAt(i)) >>> 0;
+                for (let r = 0; r < cells; r++) {
+                    for (let c = 0; c < cells; c++) {
+                        const isFinder = (r < 7 && c < 7) || (r < 7 && c >= cells - 7) || (r >= cells - 7 && c < 7);
+                        if (isFinder) {
+                            const inOuter = r === 0 || r === 6 || c === 0 || c === 6 || r === cells - 1 || r === cells - 7 || c === cells - 1 || c === cells - 7;
+                            const inInner = (r >= 2 && r <= 4 && c >= 2 && c <= 4) || (r >= 2 && r <= 4 && c >= cells - 5 && c <= cells - 3) || (r >= cells - 5 && r <= cells - 3 && c >= 2 && c <= 4);
+                            if (inOuter || inInner) ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize, cellSize);
+                        } else if (((seed ^ (r * 131 + c * 97)) & 3) !== 0) {
+                            ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize, cellSize);
+                        }
+                    }
+                }
+            }
+        }
+
         window.openUpiRedirectModal = function(from, to, amount) {
             const evt = getActiveEvent();
             const recipient = getMemberDetails(to, evt);
-            const vpa = recipient.upi || `${to.toLowerCase().replace(/\s+/g, '')}@upi`;
+            const vpa = recipient.upi || `${to.toLowerCase().replace(/[^a-z0-9]/g, '')}@okaxis`;
             pendingUpiTransfer = { from, to, amount, vpa };
 
+            document.getElementById("upiPayRecipientPfp").src = recipient.pfp || generateInitialsAvatar(to);
             document.getElementById("upiPayTitle").textContent = `${from} paying ${to}`;
             document.getElementById("upiPayVpaBadge").textContent = vpa;
-            document.getElementById("upiPayAmountBig").textContent = `₹${amount}`;
+            document.getElementById("upiQrSubName").textContent = to;
+            document.getElementById("upiPayAmountBig").textContent = `₹${amount.toLocaleString("en-IN")}`;
+            document.getElementById("upiModalEditVpaInput").value = vpa;
 
             const eventLabel = evt ? evt.name : "FoldSplit";
             const upiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(to)}&am=${encodeURIComponent(amount)}&cu=INR&tn=${encodeURIComponent(eventLabel + ' Split')}`;
             document.getElementById("upiDeepLinkAnchor").setAttribute("href", upiUri);
 
+            renderUpiQrToCanvas(upiUri);
             document.getElementById("upiRedirectModal").classList.remove("hidden");
+        };
+
+        window.updateLiveQrFromInput = function() {
+            if (!pendingUpiTransfer) return;
+            const newVpa = (document.getElementById("upiModalEditVpaInput").value || "").trim();
+            if (!newVpa) return;
+
+            pendingUpiTransfer.vpa = newVpa;
+            document.getElementById("upiPayVpaBadge").textContent = newVpa;
+
+            const evt = getActiveEvent();
+            if (evt) {
+                if (!evt.memberProfiles) evt.memberProfiles = {};
+                if (!evt.memberProfiles[pendingUpiTransfer.to]) {
+                    evt.memberProfiles[pendingUpiTransfer.to] = {
+                        name: pendingUpiTransfer.to,
+                        pfp: generateInitialsAvatar(pendingUpiTransfer.to),
+                        deviceName: "Member Phone"
+                    };
+                }
+                evt.memberProfiles[pendingUpiTransfer.to].upi = newVpa;
+                saveLocalState();
+            }
+
+            const eventLabel = evt ? evt.name : "FoldSplit";
+            const upiUri = `upi://pay?pa=${encodeURIComponent(newVpa)}&pn=${encodeURIComponent(pendingUpiTransfer.to)}&am=${encodeURIComponent(pendingUpiTransfer.amount)}&cu=INR&tn=${encodeURIComponent(eventLabel + ' Split')}`;
+            document.getElementById("upiDeepLinkAnchor").setAttribute("href", upiUri);
+            renderUpiQrToCanvas(upiUri);
         };
 
         window.closeUpiRedirectModal = function() {
@@ -2601,15 +3323,7 @@
 
         window.handleUpiDeepLinkClick = function() {
             if (!pendingUpiTransfer) return;
-            showToast(`Redirecting to UPI App for ${pendingUpiTransfer.vpa} (₹${pendingUpiTransfer.amount})...`);
-        };
-
-        window.launchSpecificUpiApp = function(appName) {
-            if (!pendingUpiTransfer) return;
-            const { to, amount, vpa } = pendingUpiTransfer;
-            const upiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(to)}&am=${encodeURIComponent(amount)}&cu=INR`;
-            window.location.href = upiUri;
-            showToast(`Opening ${appName} to pay ${to} ₹${amount}`);
+            showToast(`Opening UPI App for ${pendingUpiTransfer.vpa} (₹${pendingUpiTransfer.amount})...`);
         };
 
         window.confirmSettlementCleared = async function(method) {
@@ -2638,11 +3352,29 @@
         // ===================================================================
         // CREATE EVENT, SHARE LINK & MANAGE PARTICIPANTS MODAL
         // ===================================================================
+        function buildEventShareUrl(evt) {
+            const baseUrl = `${window.location.origin}${window.location.pathname}`;
+            const params = new URLSearchParams({
+                event: evt.code,
+                title: evt.name,
+                by: evt.createdByName || (state.userProfile ? state.userProfile.name : "Organizer"),
+                at: evt.createdAtFormatted || evt.dateStr
+            });
+            return `${baseUrl}?${params.toString()}`;
+        }
+
         function createEventObject(title, dateISO, customCode = null) {
             const me = state.userProfile;
             const dt = dateISO ? new Date(dateISO + "T12:00:00") : new Date();
+            const now = new Date();
             const monthShortNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             const monthPretty = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+            const hours = now.getHours();
+            const mins = String(now.getMinutes()).padStart(2, "0");
+            const ampm = hours >= 12 ? "PM" : "AM";
+            const hr12 = hours % 12 || 12;
+            const createdAtFormatted = `${monthPretty[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()} • ${hr12}:${mins} ${ampm}`;
 
             const slug = customCode || (title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 14) + "-" + String(Math.floor(100 + Math.random() * 900)));
 
@@ -2652,12 +3384,14 @@
                 name: title,
                 dateISO: dt.toISOString().slice(0, 10),
                 dateStr: `${monthPretty[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
+                createdAtFormatted,
                 dayNum: dt.getDate(),
                 monthIndex: dt.getMonth(),
                 monthShort: monthShortNames[dt.getMonth()],
                 yearNum: dt.getFullYear(),
                 iconLetter: title.charAt(0).toUpperCase(),
                 createdByUserId: me.id,
+                createdByName: me.name,
                 members: [me.name],
                 memberProfiles: {
                     [me.name]: {
@@ -2680,20 +3414,21 @@
 
             const activeSec = document.getElementById("activeEventShareSection");
             if (!evt) {
-                document.getElementById("shareModalHeader").textContent = "Create Your First Event";
+                document.getElementById("shareModalHeader").textContent = "Create or Join an Event";
                 activeSec.classList.add("hidden");
             } else {
                 document.getElementById("shareModalHeader").textContent = `${evt.name} — Link & People`;
                 activeSec.classList.remove("hidden");
-                document.getElementById("modalShareUrlInput").value = `${window.location.origin}${window.location.pathname}?event=${evt.code}`;
+                document.getElementById("modalHiddenUrlEventTitle").textContent = `${evt.name} (Created by ${evt.createdByName || evt.members[0]})`;
 
                 const listEl = document.getElementById("modalPeopleList");
                 listEl.innerHTML = evt.members.map(m => {
                     const info = getMemberDetails(m, evt);
+                    const pColor = getPersonColor(m, evt);
                     return `
                         <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-black border border-[#22242a] text-xs">
                             <div class="flex items-center gap-2.5">
-                                <img src="${info.pfp}" class="w-6 h-6 rounded-full object-cover">
+                                <img src="${info.pfp}" class="w-6 h-6 rounded-full object-cover" style="border: 1.5px solid ${pColor}">
                                 <span class="font-bold text-white">${m}</span>
                                 ${info.upi ? `<span class="text-[#787b84] font-mono">${info.upi}</span>` : ''}
                             </div>
@@ -2732,7 +3467,7 @@
             document.getElementById("newEventTitleInput").value = "";
             await ApiService.createEvent(newEvt);
             renderAll();
-            openShareAndPeopleModal(); // Keep modal open so they can immediately add friends or copy the link
+            openShareAndPeopleModal();
             showToast(`Event "${title}" created! Add friends or copy link.`);
         };
 
@@ -2771,10 +3506,10 @@
             const evt = getActiveEvent();
             if (!evt) {
                 openCreateEventModal();
-                showToast("Create an event first to get a shareable link");
+                showToast("Create an event first to copy its invite link");
                 return;
             }
-            const url = `${window.location.origin}${window.location.pathname}?event=${evt.code}`;
+            const url = buildEventShareUrl(evt);
             const temp = document.createElement("textarea");
             temp.value = url;
             temp.style.position = "fixed";
@@ -2783,9 +3518,9 @@
             temp.select();
             try {
                 document.execCommand("copy");
-                showToast(`Invite link copied for ${evt.name}`);
+                showToast(`Copied invite link for "${evt.name}"!`);
             } catch (e) {
-                showToast("Share link ready");
+                showToast("Invite link ready");
             }
             document.body.removeChild(temp);
         };
@@ -2805,10 +3540,33 @@
             }, 2800);
         }
 
+        async function syncEventsWithServer() {
+            if (!state.userProfile) return;
+            try {
+                const res = await fetch(`${CONFIG.API_BASE_URL}/api/events`, {
+                    headers: ApiService.getHeaders()
+                });
+                const data = await res.json();
+                if (data.ok && Array.isArray(data.events)) {
+                    state.events = data.events;
+                    saveLocalState();
+                    renderAll();
+                }
+            } catch (e) {
+                // Background fallback to offline cache
+            }
+        }
+
         window.onload = async function() {
             await DeviceIdentity.init();
+            initSwipeToApproveSlider();
             checkOnboardingStatus();
+            await syncEventsWithServer();
             renderAll();
+
+            // Background polling: automatically sync every 3.5 seconds
+            // so Phone B sees Phone A's added expenses instantly without reloading!
+            setInterval(syncEventsWithServer, 3500);
         };
     </script>
 </body>
