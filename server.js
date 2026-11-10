@@ -9,31 +9,27 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ==========================================
-// 1. SECURITY & NO-CACHE MIDDLEWARE
-// ==========================================
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '12mb' }));
+app.use(express.urlencoded({ extended: true, limit: '12mb' }));
 
-// CRITICAL FIX: Prevent browsers (especially iOS Safari) from caching API responses
+// Prevent caching on all API routes so laptop & phones stay in sync
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
-  res.set('Surrogate-Control', 'no-store');
   next();
 });
 
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1200,
+  max: 1500,
   message: { error: 'Too many requests, please try again later.' }
 }));
 
 // ==========================================
-// 2. DATABASE MODELS
+// 1. DATABASE MODELS
 // ==========================================
 const User = mongoose.model('User', new mongoose.Schema({
   userId: { type: String, required: true, unique: true, index: true },
@@ -58,12 +54,14 @@ const Event = mongoose.model('Event', new mongoose.Schema({
   monthIndex: { type: Number, default: 0 },
   monthShort: { type: String, default: 'JAN' },
   yearNum: { type: Number, default: 2026 },
-  iconLetter: { type: String, default: 'E' },
+  iconLetter: { type: String, default: '🎉' },
+  coverType: { type: String, default: 'emoji' },
+  coverValue: { type: String, default: '🎉' },
   createdByUserId: { type: String, required: true },
   createdByName: { type: String, default: '' },
   createdByUsername: { type: String, default: '' },
-  members: [{ type: String }], // Array of member display names in this specific event
-  memberUsernames: [{ type: String }], // Array of @usernames in this specific event
+  members: [{ type: String }],
+  memberUsernames: [{ type: String }],
   memberProfiles: { type: mongoose.Schema.Types.Mixed, default: {} },
   settledTransfers: [{
     id: String,
@@ -83,21 +81,23 @@ const Expense = mongoose.model('Expense', new mongoose.Schema({
   eventCode: { type: String, default: '', index: true },
   title: { type: String, required: true },
   category: { type: String, required: true },
+  categoryColor: { type: String, default: '' },
   amount: { type: Number, required: true },
   paidBy: { type: String, required: true },
   method: { type: String, default: 'UPI' },
   participants: [{ type: String }],
   cleared: { type: Boolean, default: false },
+  note: { type: String, default: '' },
   createdBy: { type: String, required: true },
   createdByUserId: { type: String, required: true },
   createdByPfp: { type: String, default: '' },
   deviceUsed: { type: String, default: '' },
   deviceId: { type: String, default: '' },
   timeStr: { type: String, default: '' },
+  dateFormatted: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 }));
 
-// Helper: Find an event by either its eventId OR its shareable code
 async function findEventByIdOrCode(identifier) {
   if (!identifier) return null;
   const clean = identifier.trim();
@@ -109,15 +109,10 @@ async function findEventByIdOrCode(identifier) {
   });
 }
 
-// Helper: Attach all expenses to an event object
 async function hydrateEvent(evtDoc) {
   const evt = evtDoc.toObject ? evtDoc.toObject() : { ...evtDoc };
   const expenses = await Expense.find({
-    $or: [
-      { eventId: evt.eventId },
-      { eventId: evt.code },
-      { eventCode: evt.code }
-    ]
+    $or: [{ eventId: evt.eventId }, { eventId: evt.code }, { eventCode: evt.code }]
   }).sort({ createdAt: -1 }).lean();
 
   evt.expenses = expenses.map(x => ({ ...x, id: x.expenseId }));
@@ -129,7 +124,7 @@ async function hydrateEvent(evtDoc) {
 }
 
 // ==========================================
-// 3. AUTHENTICATION ROUTES
+// 2. AUTH & PROFILE ROUTES
 // ==========================================
 app.post('/api/auth/register', async (req, res) => {
   try {
@@ -137,13 +132,11 @@ app.post('/api/auth/register', async (req, res) => {
     if (!username || !pin || String(pin).length !== 4) {
       return res.status(400).json({ error: 'Valid username and 4-digit PIN required.' });
     }
-
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
     const existing = await User.findOne({ username: cleanUsername });
     if (existing) {
       return res.status(409).json({ error: 'Username already taken. Please log in.' });
     }
-
     const cleanName = (name || cleanUsername).trim();
     const user = await User.create({
       userId: 'usr_' + cleanUsername + '_' + Date.now().toString(36),
@@ -155,7 +148,6 @@ app.post('/api/auth/register', async (req, res) => {
       deviceName: deviceName || 'Web Device',
       deviceId: deviceId || 'DEV-ANON'
     });
-
     res.status(201).json({
       ok: true,
       user: {
@@ -178,14 +170,9 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, pin, deviceName, deviceId } = req.body;
     const cleanUsername = (username || '').toLowerCase().trim().replace(/^@/, '');
-
     const user = await User.findOne({ username: cleanUsername });
-    if (!user) {
-      return res.status(404).json({ error: 'Account not found. Create an account first.' });
-    }
-    if (user.pin !== String(pin).trim()) {
-      return res.status(401).json({ error: 'Incorrect 4-digit PIN.' });
-    }
+    if (!user) return res.status(404).json({ error: 'Account not found. Create an account first.' });
+    if (user.pin !== String(pin).trim()) return res.status(401).json({ error: 'Incorrect 4-digit PIN.' });
 
     user.deviceName = deviceName || user.deviceName;
     user.deviceId = deviceId || user.deviceId;
@@ -218,8 +205,6 @@ app.post('/api/users/profile', async (req, res) => {
       { name, upiId: upi || '', pfpUrl: pfp || '', deviceName, deviceId },
       { new: true }
     );
-
-    // Also update this user's profile inside any events they belong to
     if (user) {
       const allEvents = await Event.find({ members: name });
       for (const evt of allEvents) {
@@ -238,7 +223,6 @@ app.post('/api/users/profile', async (req, res) => {
         }
       }
     }
-
     res.json({ ok: true, user });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update profile.' });
@@ -246,10 +230,8 @@ app.post('/api/users/profile', async (req, res) => {
 });
 
 // ==========================================
-// 4. EVENT, PARTICIPANT & EXPENSE ROUTES
+// 3. EVENT & EXPENSE ROUTES
 // ==========================================
-
-// Get all events (hydrated with live participants and expenses)
 app.get('/api/events', async (req, res) => {
   try {
     const rawEvents = await Event.find().sort({ createdAt: -1 });
@@ -263,27 +245,23 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-// Lookup single event by code for Swipe-to-Approve screen
 app.get('/api/events/by-code/:code', async (req, res) => {
   try {
     const evtDoc = await findEventByIdOrCode(req.params.code);
     if (!evtDoc) return res.status(404).json({ error: 'Event not found.' });
-    const hydrated = await hydrateEvent(evtDoc);
-    res.json({ ok: true, event: hydrated });
+    res.json({ ok: true, event: await hydrateEvent(evtDoc) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch event.' });
   }
 });
 
-// Create New Event
 app.post('/api/events', async (req, res) => {
   try {
     const evt = req.body;
-    const creatorName = (evt.createdByName || (evt.members && evt.members[0]) || 'Organizer').trim();
+    const creatorName = (evt.createdByName || (evt.members && evt.members[0]) || 'Host').trim();
     const creatorUsername = (evt.createdByUsername || '').toLowerCase().trim();
-
     const initialProfiles = evt.memberProfiles || {};
-    if ( initialProfiles[creatorName] && creatorUsername ) {
+    if (initialProfiles[creatorName] && creatorUsername) {
       initialProfiles[creatorName].username = creatorUsername;
     }
 
@@ -299,6 +277,8 @@ app.post('/api/events', async (req, res) => {
       monthShort: evt.monthShort || 'JAN',
       yearNum: evt.yearNum || 2026,
       iconLetter: evt.iconLetter || evt.name.charAt(0).toUpperCase(),
+      coverType: evt.coverType || 'emoji',
+      coverValue: evt.coverValue || '🎉',
       createdByUserId: evt.createdByUserId,
       createdByName: creatorName,
       createdByUsername: creatorUsername,
@@ -307,14 +287,12 @@ app.post('/api/events', async (req, res) => {
       memberProfiles: initialProfiles
     });
 
-    const hydrated = await hydrateEvent(newEventDoc);
-    res.status(201).json({ ok: true, event: hydrated });
+    res.status(201).json({ ok: true, event: await hydrateEvent(newEventDoc) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create event.' });
   }
 });
 
-// Join Event (Updates Event's Specific People List & Syncs Across All Devices)
 app.post('/api/events/:eventId/join', async (req, res) => {
   try {
     const eventDoc = await findEventByIdOrCode(req.params.eventId);
@@ -328,9 +306,8 @@ app.post('/api/events/:eventId/join', async (req, res) => {
     const deviceName = req.body.deviceName || 'Member Device';
     const deviceId = req.body.deviceId || '';
 
-    if (!rawName) return res.status(400).json({ error: 'Participant name is required.' });
+    if (!rawName) return res.status(400).json({ error: 'Participant name required.' });
 
-    // Check if member already exists in this event (case-insensitive)
     let canonicalName = rawName;
     const existingMember = eventDoc.members.find(m => m.toLowerCase() === rawName.toLowerCase());
     if (existingMember) {
@@ -361,14 +338,12 @@ app.post('/api/events/:eventId/join', async (req, res) => {
     eventDoc.markModified('memberProfiles');
     await eventDoc.save();
 
-    const hydrated = await hydrateEvent(eventDoc);
-    res.json({ ok: true, event: hydrated });
+    res.json({ ok: true, event: await hydrateEvent(eventDoc) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to join event.' });
   }
 });
 
-// Add Expense to Event (Normalizes eventId & code so all devices see it immediately)
 app.post('/api/events/:eventId/expenses', async (req, res) => {
   try {
     const eventDoc = await findEventByIdOrCode(req.params.eventId);
@@ -381,17 +356,20 @@ app.post('/api/events/:eventId/expenses', async (req, res) => {
       eventCode: eventDoc.code,
       title: exp.title,
       category: exp.category,
+      categoryColor: exp.categoryColor || '',
       amount: Number(exp.amount),
       paidBy: exp.paidBy,
       method: exp.method || 'UPI',
       participants: Array.isArray(exp.participants) ? exp.participants : eventDoc.members,
       cleared: false,
+      note: exp.note || '',
       createdBy: exp.createdBy,
       createdByUserId: exp.createdByUserId,
       createdByPfp: exp.createdByPfp || '',
       deviceUsed: exp.deviceUsed || '',
       deviceId: exp.deviceId || '',
-      timeStr: exp.timeStr || ''
+      timeStr: exp.timeStr || '',
+      dateFormatted: exp.dateFormatted || ''
     });
 
     res.status(201).json({ ok: true, expense: { ...newExpense.toObject(), id: newExpense.expenseId } });
@@ -400,12 +378,16 @@ app.post('/api/events/:eventId/expenses', async (req, res) => {
   }
 });
 
-// Toggle Cleared Status
 app.patch('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   try {
+    const updateFields = {};
+    if (typeof req.body.cleared === 'boolean') updateFields.cleared = req.body.cleared;
+    if (typeof req.body.note === 'string') updateFields.note = req.body.note;
+    if (typeof req.body.title === 'string') updateFields.title = req.body.title;
+
     const updated = await Expense.findOneAndUpdate(
       { expenseId: req.params.expenseId },
-      { cleared: Boolean(req.body.cleared) },
+      { $set: updateFields },
       { new: true }
     );
     res.json({ ok: true, expense: updated });
@@ -414,7 +396,6 @@ app.patch('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   }
 });
 
-// Delete Expense
 app.delete('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   try {
     await Expense.findOneAndDelete({ expenseId: req.params.expenseId });
@@ -424,7 +405,6 @@ app.delete('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   }
 });
 
-// Record Settlement
 app.post('/api/events/:eventId/settlements', async (req, res) => {
   try {
     const eventDoc = await findEventByIdOrCode(req.params.eventId);
@@ -450,9 +430,6 @@ app.post('/api/events/:eventId/settlements', async (req, res) => {
 
 app.post('/api/categories', (req, res) => res.json({ ok: true }));
 
-// ==========================================
-// 5. SERVE FRONTEND & SHORT LINKS
-// ==========================================
 const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
 
@@ -464,7 +441,7 @@ app.get(['/e/:code', '/:code'], (req, res, next) => {
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
-    console.log('✓ Successfully connected to MongoDB Atlas!');
-    app.listen(PORT, () => console.log(`🚀 FoldSplit Server running on port ${PORT}`));
+    console.log('✓ Connected to MongoDB Atlas');
+    app.listen(PORT, () => console.log(`🚀 FoldSplit running on port ${PORT}`));
   })
-  .catch((err) => console.error('Database connection failed:', err.message));
+  .catch((err) => console.error('DB error:', err.message));
