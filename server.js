@@ -9,19 +9,31 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ==========================================
+// 1. SECURITY & NO-CACHE MIDDLEWARE
+// ==========================================
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// CRITICAL FIX: Prevent browsers (especially iOS Safari) from caching API responses
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
+
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 800,
+  max: 1200,
   message: { error: 'Too many requests, please try again later.' }
 }));
 
 // ==========================================
-// 1. DATABASE MODELS
+// 2. DATABASE MODELS
 // ==========================================
 const User = mongoose.model('User', new mongoose.Schema({
   userId: { type: String, required: true, unique: true, index: true },
@@ -49,7 +61,9 @@ const Event = mongoose.model('Event', new mongoose.Schema({
   iconLetter: { type: String, default: 'E' },
   createdByUserId: { type: String, required: true },
   createdByName: { type: String, default: '' },
-  members: [{ type: String }],
+  createdByUsername: { type: String, default: '' },
+  members: [{ type: String }], // Array of member display names in this specific event
+  memberUsernames: [{ type: String }], // Array of @usernames in this specific event
   memberProfiles: { type: mongoose.Schema.Types.Mixed, default: {} },
   settledTransfers: [{
     id: String,
@@ -66,6 +80,7 @@ const Event = mongoose.model('Event', new mongoose.Schema({
 const Expense = mongoose.model('Expense', new mongoose.Schema({
   expenseId: { type: String, required: true, unique: true, index: true },
   eventId: { type: String, required: true, index: true },
+  eventCode: { type: String, default: '', index: true },
   title: { type: String, required: true },
   category: { type: String, required: true },
   amount: { type: Number, required: true },
@@ -82,30 +97,62 @@ const Expense = mongoose.model('Expense', new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }));
 
+// Helper: Find an event by either its eventId OR its shareable code
+async function findEventByIdOrCode(identifier) {
+  if (!identifier) return null;
+  const clean = identifier.trim();
+  return Event.findOne({
+    $or: [
+      { eventId: clean },
+      { code: { $regex: new RegExp('^' + clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') } }
+    ]
+  });
+}
+
+// Helper: Attach all expenses to an event object
+async function hydrateEvent(evtDoc) {
+  const evt = evtDoc.toObject ? evtDoc.toObject() : { ...evtDoc };
+  const expenses = await Expense.find({
+    $or: [
+      { eventId: evt.eventId },
+      { eventId: evt.code },
+      { eventCode: evt.code }
+    ]
+  }).sort({ createdAt: -1 }).lean();
+
+  evt.expenses = expenses.map(x => ({ ...x, id: x.expenseId }));
+  evt.id = evt.eventId;
+  evt.memberProfiles = evt.memberProfiles || {};
+  evt.members = evt.members || [];
+  evt.memberUsernames = evt.memberUsernames || [];
+  return evt;
+}
+
 // ==========================================
-// 2. AUTH ROUTES (Username + 4-Digit PIN)
+// 3. AUTHENTICATION ROUTES
 // ==========================================
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, pin, name, upi, pfp, deviceName, deviceId } = req.body;
-    if (!username || !pin || pin.length !== 4) {
+    if (!username || !pin || String(pin).length !== 4) {
       return res.status(400).json({ error: 'Valid username and 4-digit PIN required.' });
     }
 
-    const clean = username.toLowerCase().trim();
-    const existing = await User.findOne({ username: clean });
+    const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
+    const existing = await User.findOne({ username: cleanUsername });
     if (existing) {
       return res.status(409).json({ error: 'Username already taken. Please log in.' });
     }
 
+    const cleanName = (name || cleanUsername).trim();
     const user = await User.create({
-      userId: 'usr_' + clean + '_' + Date.now().toString(36),
-      username: clean,
-      pin,
-      name: name.trim(),
-      upiId: upi || '',
+      userId: 'usr_' + cleanUsername + '_' + Date.now().toString(36),
+      username: cleanUsername,
+      pin: String(pin).trim(),
+      name: cleanName.charAt(0).toUpperCase() + cleanName.slice(1),
+      upiId: (upi || '').trim(),
       pfpUrl: pfp || '',
-      deviceName: deviceName || 'Web',
+      deviceName: deviceName || 'Web Device',
       deviceId: deviceId || 'DEV-ANON'
     });
 
@@ -130,13 +177,13 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, pin, deviceName, deviceId } = req.body;
-    const clean = (username || '').toLowerCase().trim();
+    const cleanUsername = (username || '').toLowerCase().trim().replace(/^@/, '');
 
-    const user = await User.findOne({ username: clean });
+    const user = await User.findOne({ username: cleanUsername });
     if (!user) {
       return res.status(404).json({ error: 'Account not found. Create an account first.' });
     }
-    if (user.pin !== pin) {
+    if (user.pin !== String(pin).trim()) {
       return res.status(401).json({ error: 'Incorrect 4-digit PIN.' });
     }
 
@@ -164,12 +211,34 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/users/profile', async (req, res) => {
   try {
-    const { id, name, upi, pfp, deviceName, deviceId } = req.body;
+    const { id, username, name, upi, pfp, deviceName, deviceId } = req.body;
+    const query = id ? { userId: id } : { username: (username || '').toLowerCase() };
     const user = await User.findOneAndUpdate(
-      { userId: id },
+      query,
       { name, upiId: upi || '', pfpUrl: pfp || '', deviceName, deviceId },
       { new: true }
     );
+
+    // Also update this user's profile inside any events they belong to
+    if (user) {
+      const allEvents = await Event.find({ members: name });
+      for (const evt of allEvents) {
+        if (evt.memberProfiles && evt.memberProfiles[name]) {
+          evt.memberProfiles[name] = {
+            ...evt.memberProfiles[name],
+            name: user.name,
+            username: user.username,
+            upi: user.upiId,
+            pfp: user.pfpUrl,
+            deviceName: user.deviceName,
+            deviceId: user.deviceId
+          };
+          evt.markModified('memberProfiles');
+          await evt.save();
+        }
+      }
+    }
+
     res.json({ ok: true, user });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update profile.' });
@@ -177,16 +246,16 @@ app.post('/api/users/profile', async (req, res) => {
 });
 
 // ==========================================
-// 3. EVENT & EXPENSE ROUTES
+// 4. EVENT, PARTICIPANT & EXPENSE ROUTES
 // ==========================================
+
+// Get all events (hydrated with live participants and expenses)
 app.get('/api/events', async (req, res) => {
   try {
-    const events = await Event.find().sort({ createdAt: -1 }).lean();
-    for (const evt of events) {
-      const expenses = await Expense.find({ eventId: evt.eventId }).sort({ createdAt: -1 }).lean();
-      evt.expenses = expenses.map(x => ({ ...x, id: x.expenseId }));
-      evt.id = evt.eventId;
-      evt.memberProfiles = evt.memberProfiles || {};
+    const rawEvents = await Event.find().sort({ createdAt: -1 });
+    const events = [];
+    for (const evtDoc of rawEvents) {
+      events.push(await hydrateEvent(evtDoc));
     }
     res.json({ ok: true, events });
   } catch (err) {
@@ -194,30 +263,31 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
+// Lookup single event by code for Swipe-to-Approve screen
 app.get('/api/events/by-code/:code', async (req, res) => {
   try {
-    const cleanCode = req.params.code.trim();
-    const event = await Event.findOne({
-      $or: [
-        { code: { $regex: new RegExp('^' + cleanCode + '$', 'i') } },
-        { eventId: cleanCode }
-      ]
-    }).lean();
-
-    if (!event) return res.status(404).json({ error: 'Event not found.' });
-    const expenses = await Expense.find({ eventId: event.eventId }).sort({ createdAt: -1 }).lean();
-    event.expenses = expenses.map(x => ({ ...x, id: x.expenseId }));
-    event.id = event.eventId;
-    res.json({ ok: true, event });
+    const evtDoc = await findEventByIdOrCode(req.params.code);
+    if (!evtDoc) return res.status(404).json({ error: 'Event not found.' });
+    const hydrated = await hydrateEvent(evtDoc);
+    res.json({ ok: true, event: hydrated });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch event.' });
   }
 });
 
+// Create New Event
 app.post('/api/events', async (req, res) => {
   try {
     const evt = req.body;
-    const newEvent = await Event.create({
+    const creatorName = (evt.createdByName || (evt.members && evt.members[0]) || 'Organizer').trim();
+    const creatorUsername = (evt.createdByUsername || '').toLowerCase().trim();
+
+    const initialProfiles = evt.memberProfiles || {};
+    if ( initialProfiles[creatorName] && creatorUsername ) {
+      initialProfiles[creatorName].username = creatorUsername;
+    }
+
+    const newEventDoc = await Event.create({
       eventId: evt.id,
       code: evt.code,
       name: evt.name,
@@ -230,64 +300,91 @@ app.post('/api/events', async (req, res) => {
       yearNum: evt.yearNum || 2026,
       iconLetter: evt.iconLetter || evt.name.charAt(0).toUpperCase(),
       createdByUserId: evt.createdByUserId,
-      createdByName: evt.createdByName || '',
-      members: evt.members || [],
-      memberProfiles: evt.memberProfiles || {}
+      createdByName: creatorName,
+      createdByUsername: creatorUsername,
+      members: [creatorName],
+      memberUsernames: creatorUsername ? [creatorUsername] : [],
+      memberProfiles: initialProfiles
     });
-    res.status(201).json({ ok: true, event: newEvent });
+
+    const hydrated = await hydrateEvent(newEventDoc);
+    res.status(201).json({ ok: true, event: hydrated });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create event.' });
   }
 });
 
+// Join Event (Updates Event's Specific People List & Syncs Across All Devices)
 app.post('/api/events/:eventId/join', async (req, res) => {
   try {
-    const target = req.params.eventId.trim();
-    const { name, upi, pfp, deviceName, deviceId } = req.body;
+    const eventDoc = await findEventByIdOrCode(req.params.eventId);
+    if (!eventDoc) return res.status(404).json({ error: 'Event not found.' });
 
-    const event = await Event.findOne({
-      $or: [
-        { eventId: target },
-        { code: { $regex: new RegExp('^' + target + '$', 'i') } }
-      ]
-    });
-    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    const rawName = (req.body.name || '').trim();
+    const cleanUsername = (req.body.username || '').toLowerCase().trim().replace(/^@/, '');
+    const userId = req.body.userId || '';
+    const upi = (req.body.upi || '').trim();
+    const pfp = req.body.pfp || '';
+    const deviceName = req.body.deviceName || 'Member Device';
+    const deviceId = req.body.deviceId || '';
 
-    const exists = event.members.some(m => m.toLowerCase() === name.toLowerCase());
-    if (!exists) {
-      event.members.push(name);
+    if (!rawName) return res.status(400).json({ error: 'Participant name is required.' });
+
+    // Check if member already exists in this event (case-insensitive)
+    let canonicalName = rawName;
+    const existingMember = eventDoc.members.find(m => m.toLowerCase() === rawName.toLowerCase());
+    if (existingMember) {
+      canonicalName = existingMember;
+    } else {
+      eventDoc.members.push(canonicalName);
     }
 
-    const profiles = { ...(event.memberProfiles || {}) };
-    profiles[name] = {
-      name,
-      upi: upi || '',
-      pfp: pfp || '',
-      deviceName: deviceName || 'Member Device',
-      deviceId: deviceId || ''
-    };
-    event.memberProfiles = profiles;
-    event.markModified('memberProfiles');
+    if (cleanUsername && !eventDoc.memberUsernames.includes(cleanUsername)) {
+      eventDoc.memberUsernames.push(cleanUsername);
+    }
 
-    await event.save();
-    res.json({ ok: true, event });
+    const updatedProfiles = { ...(eventDoc.memberProfiles || {}) };
+    updatedProfiles[canonicalName] = {
+      userId,
+      username: cleanUsername,
+      name: canonicalName,
+      upi,
+      pfp,
+      deviceName,
+      deviceId,
+      joinedAt: new Date().toISOString()
+    };
+
+    eventDoc.memberProfiles = updatedProfiles;
+    eventDoc.markModified('members');
+    eventDoc.markModified('memberUsernames');
+    eventDoc.markModified('memberProfiles');
+    await eventDoc.save();
+
+    const hydrated = await hydrateEvent(eventDoc);
+    res.json({ ok: true, event: hydrated });
   } catch (err) {
     res.status(500).json({ error: 'Failed to join event.' });
   }
 });
 
+// Add Expense to Event (Normalizes eventId & code so all devices see it immediately)
 app.post('/api/events/:eventId/expenses', async (req, res) => {
   try {
+    const eventDoc = await findEventByIdOrCode(req.params.eventId);
+    if (!eventDoc) return res.status(404).json({ error: 'Event not found.' });
+
     const exp = req.body;
     const newExpense = await Expense.create({
-      expenseId: exp.id,
-      eventId: req.params.eventId,
+      expenseId: exp.id || ('exp_' + Date.now()),
+      eventId: eventDoc.eventId,
+      eventCode: eventDoc.code,
       title: exp.title,
       category: exp.category,
-      amount: exp.amount,
+      amount: Number(exp.amount),
       paidBy: exp.paidBy,
-      method: exp.method,
-      participants: exp.participants,
+      method: exp.method || 'UPI',
+      participants: Array.isArray(exp.participants) ? exp.participants : eventDoc.members,
       cleared: false,
       createdBy: exp.createdBy,
       createdByUserId: exp.createdByUserId,
@@ -296,51 +393,55 @@ app.post('/api/events/:eventId/expenses', async (req, res) => {
       deviceId: exp.deviceId || '',
       timeStr: exp.timeStr || ''
     });
-    res.status(201).json({ ok: true, expense: newExpense });
+
+    res.status(201).json({ ok: true, expense: { ...newExpense.toObject(), id: newExpense.expenseId } });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save expense.' });
   }
 });
 
+// Toggle Cleared Status
 app.patch('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   try {
     const updated = await Expense.findOneAndUpdate(
       { expenseId: req.params.expenseId },
-      { cleared: req.body.cleared },
+      { cleared: Boolean(req.body.cleared) },
       { new: true }
     );
     res.json({ ok: true, expense: updated });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update.' });
+    res.status(500).json({ error: 'Failed to update expense.' });
   }
 });
 
+// Delete Expense
 app.delete('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   try {
     await Expense.findOneAndDelete({ expenseId: req.params.expenseId });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete.' });
+    res.status(500).json({ error: 'Failed to delete expense.' });
   }
 });
 
+// Record Settlement
 app.post('/api/events/:eventId/settlements', async (req, res) => {
   try {
-    const event = await Event.findOne({
-      $or: [{ eventId: req.params.eventId }, { code: req.params.eventId }]
-    });
-    if (!event) return res.status(404).json({ error: 'Event not found.' });
+    const eventDoc = await findEventByIdOrCode(req.params.eventId);
+    if (!eventDoc) return res.status(404).json({ error: 'Event not found.' });
 
-    event.settledTransfers.push({
-      id: req.body.id,
+    eventDoc.settledTransfers.push({
+      id: req.body.id || ('st_' + Date.now()),
       from: req.body.from,
       to: req.body.to,
-      amount: req.body.amount,
-      method: req.body.method,
+      amount: Number(req.body.amount),
+      method: req.body.method || 'UPI',
       settledByDeviceId: req.body.settledByDeviceId,
       settledAt: new Date()
     });
-    await event.save();
+    eventDoc.markModified('settledTransfers');
+    await eventDoc.save();
+
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to settle.' });
@@ -350,7 +451,7 @@ app.post('/api/events/:eventId/settlements', async (req, res) => {
 app.post('/api/categories', (req, res) => res.json({ ok: true }));
 
 // ==========================================
-// 4. SERVE FRONTEND & SHORT LINKS (/:code)
+// 5. SERVE FRONTEND & SHORT LINKS
 // ==========================================
 const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
