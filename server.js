@@ -9,28 +9,24 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ==========================================
-// 1. SECURITY & MIDDLEWARE
-// ==========================================
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-const apiLimiter = rateLimit({
+app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: 600,
   message: { error: 'Too many requests, please try again later.' }
-});
-app.use('/api', apiLimiter);
+}));
 
 // ==========================================
-// 2. MONGOOSE MODELS
+// DATABASE MODELS
 // ==========================================
 const User = mongoose.model('User', new mongoose.Schema({
   userId: { type: String, required: true, unique: true, index: true },
   username: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
-  pin: { type: String, required: true }, // 4-digit security PIN
+  pin: { type: String, required: true },
   name: { type: String, required: true },
   upiId: { type: String, default: '' },
   pfpUrl: { type: String, default: '' },
@@ -82,10 +78,8 @@ const Expense = mongoose.model('Expense', new mongoose.Schema({
 }));
 
 // ==========================================
-// 3. AUTH & USER ROUTES (Username + 4-Digit PIN)
+// AUTH ROUTES (Database-Backed Login/Register)
 // ==========================================
-
-// Register Account
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, pin, name, upi, pfp, deviceName, deviceId } = req.body;
@@ -93,15 +87,15 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Valid username and 4-digit PIN required.' });
     }
 
-    const cleanUsername = username.toLowerCase().trim();
-    const existing = await User.findOne({ username: cleanUsername });
+    const clean = username.toLowerCase().trim();
+    const existing = await User.findOne({ username: clean });
     if (existing) {
       return res.status(409).json({ error: 'Username already taken.' });
     }
 
-    const newUser = await User.create({
-      userId: 'usr_' + cleanUsername + '_' + Date.now().toString(36),
-      username: cleanUsername,
+    const user = await User.create({
+      userId: 'usr_' + clean + '_' + Date.now().toString(36),
+      username: clean,
       pin,
       name,
       upiId: upi || '',
@@ -110,19 +104,30 @@ app.post('/api/auth/register', async (req, res) => {
       deviceId: deviceId || 'DEV-ANON'
     });
 
-    res.status(201).json({ ok: true, user: newUser });
+    res.status(201).json({
+      ok: true,
+      user: {
+        id: user.userId,
+        username: user.username,
+        pin: user.pin,
+        name: user.name,
+        upi: user.upiId,
+        pfp: user.pfpUrl,
+        deviceName: user.deviceName,
+        deviceId: user.deviceId
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: 'Registration failed.' });
   }
 });
 
-// Login Account
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, pin, deviceName, deviceId } = req.body;
-    const cleanUsername = (username || '').toLowerCase().trim();
+    const clean = (username || '').toLowerCase().trim();
 
-    const user = await User.findOne({ username: cleanUsername });
+    const user = await User.findOne({ username: clean });
     if (!user) {
       return res.status(404).json({ error: 'No account found with this username.' });
     }
@@ -134,39 +139,33 @@ app.post('/api/auth/login', async (req, res) => {
     user.deviceId = deviceId || user.deviceId;
     await user.save();
 
-    res.json({ ok: true, user });
+    res.json({
+      ok: true,
+      user: {
+        id: user.userId,
+        username: user.username,
+        pin: user.pin,
+        name: user.name,
+        upi: user.upiId,
+        pfp: user.pfpUrl,
+        deviceName: user.deviceName,
+        deviceId: user.deviceId
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: 'Login failed.' });
   }
 });
 
-// Update Profile
-app.post('/api/users/profile', async (req, res) => {
-  try {
-    const { id, name, upi, pfp, deviceName, deviceId } = req.body;
-    const user = await User.findOneAndUpdate(
-      { userId: id },
-      { name, upiId: upi || '', pfpUrl: pfp || '', deviceName, deviceId },
-      { new: true }
-    );
-    res.json({ ok: true, user });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update profile.' });
-  }
-});
-
 // ==========================================
-// 4. EVENT & EXPENSE ROUTES (With Cross-Device Sync)
+// EVENT & TRANSACTION ROUTES
 // ==========================================
-
-// Get All Events & Attached Expenses
 app.get('/api/events', async (req, res) => {
   try {
     const events = await Event.find().sort({ createdAt: -1 }).lean();
     for (const evt of events) {
       evt.expenses = await Expense.find({ eventId: evt.eventId }).sort({ createdAt: -1 }).lean();
       evt.id = evt.eventId;
-      // Convert Map back to plain object for client JSON
       if (evt.memberProfiles instanceof Map) {
         evt.memberProfiles = Object.fromEntries(evt.memberProfiles);
       }
@@ -177,7 +176,7 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-// Fetch Single Event for Swipe-to-Approve Invite Preview
+// Single lookup for short invite links
 app.get('/api/events/by-code/:code', async (req, res) => {
   try {
     const event = await Event.findOne({ code: req.params.code }).lean();
@@ -186,11 +185,10 @@ app.get('/api/events/by-code/:code', async (req, res) => {
     event.id = event.eventId;
     res.json({ ok: true, event });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to retrieve event.' });
+    res.status(500).json({ error: 'Failed to fetch event.' });
   }
 });
 
-// Create Event
 app.post('/api/events', async (req, res) => {
   try {
     const evt = req.body;
@@ -212,7 +210,6 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
-// Join Event
 app.post('/api/events/:eventId/join', async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -220,9 +217,7 @@ app.post('/api/events/:eventId/join', async (req, res) => {
     const event = await Event.findOne({ $or: [{ eventId }, { code: eventId }] });
     if (!event) return res.status(404).json({ error: 'Event not found.' });
 
-    if (!event.members.includes(name)) {
-      event.members.push(name);
-    }
+    if (!event.members.includes(name)) event.members.push(name);
     if (!event.memberProfiles) event.memberProfiles = new Map();
     event.memberProfiles.set(name, { name, upi: upi || '', pfp: pfp || '', deviceName, deviceId });
 
@@ -233,14 +228,12 @@ app.post('/api/events/:eventId/join', async (req, res) => {
   }
 });
 
-// Add Expense
 app.post('/api/events/:eventId/expenses', async (req, res) => {
   try {
-    const { eventId } = req.params;
     const exp = req.body;
     const newExpense = await Expense.create({
       expenseId: exp.id,
-      eventId,
+      eventId: req.params.eventId,
       title: exp.title,
       category: exp.category,
       amount: exp.amount,
@@ -257,81 +250,68 @@ app.post('/api/events/:eventId/expenses', async (req, res) => {
     });
     res.status(201).json({ ok: true, expense: newExpense });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to record expense.' });
+    res.status(500).json({ error: 'Failed to save expense.' });
   }
 });
 
-// Toggle Cleared
 app.patch('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   try {
-    const { expenseId } = req.params;
-    const { cleared } = req.body;
-    const updated = await Expense.findOneAndUpdate({ expenseId }, { cleared }, { new: true });
+    const updated = await Expense.findOneAndUpdate(
+      { expenseId: req.params.expenseId },
+      { cleared: req.body.cleared },
+      { new: true }
+    );
     res.json({ ok: true, expense: updated });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update expense.' });
+    res.status(500).json({ error: 'Failed to update.' });
   }
 });
 
-// Delete Expense
 app.delete('/api/events/:eventId/expenses/:expenseId', async (req, res) => {
   try {
     await Expense.findOneAndDelete({ expenseId: req.params.expenseId });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete expense.' });
+    res.status(500).json({ error: 'Failed to delete.' });
   }
 });
 
-// Record Settlement
 app.post('/api/events/:eventId/settlements', async (req, res) => {
   try {
-    const { eventId } = req.params;
-    const st = req.body;
-    const event = await Event.findOne({ $or: [{ eventId }, { code: eventId }] });
+    const event = await Event.findOne({ $or: [{ eventId: req.params.eventId }, { code: req.params.eventId }] });
     if (!event) return res.status(404).json({ error: 'Event not found.' });
 
     event.settledTransfers.push({
-      id: st.id,
-      from: st.from,
-      to: st.to,
-      amount: st.amount,
-      method: st.method,
-      settledByDeviceId: st.settledByDeviceId,
+      id: req.body.id,
+      from: req.body.from,
+      to: req.body.to,
+      amount: req.body.amount,
+      method: req.body.method,
+      settledByDeviceId: req.body.settledByDeviceId,
       settledAt: new Date()
     });
     await event.save();
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed settlement.' });
+    res.status(500).json({ error: 'Failed to settle.' });
   }
 });
 
 app.post('/api/categories', (req, res) => res.json({ ok: true }));
 
-// ==========================================
-// 5. SERVE FRONTEND & CLEAN SHARE LINKS
-// ==========================================
+// Short link routes: e.g. /e/dinner-8x2f or /dinner-8x2f
 const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
 
-app.get('/:eventCode', (req, res, next) => {
-  if (req.params.eventCode.includes('.') || req.params.eventCode.startsWith('api')) {
-    return next();
-  }
+app.get(['/e/:code', '/:code'], (req, res, next) => {
+  const code = req.params.code;
+  if (code.includes('.') || code.startsWith('api')) return next();
   res.sendFile(path.join(publicDir, 'index.html'));
 });
 
-// ==========================================
-// 6. DB CONNECTION & START
-// ==========================================
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✓ Successfully connected to MongoDB Atlas!');
-    app.listen(PORT, () => {
-      console.log(`🚀 FoldSplit Server running on port ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`🚀 FoldSplit Server running on port ${PORT}`));
   })
-  .catch((err) => {
-    console.error('Database connection failed:', err.message);
-  });
+  .catch((err) => console.error('Database connection failed:', err.message));

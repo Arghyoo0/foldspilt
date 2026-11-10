@@ -1258,7 +1258,7 @@
     ==================================================================== -->
     <script>
         const CONFIG = {
-           API_BASE_URL: window.location.origin, // Automatically connects to Render backend
+            API_BASE_URL: window.location.origin,
             STORAGE_KEY: "foldsplit_prod_v2",
             USERS_DB_KEY: "foldsplit_users_db_v1",
             EVENTS_DB_KEY: "foldsplit_events_db_v1",
@@ -1274,16 +1274,15 @@
             "Entertainment"
         ];
 
-        // Distinct Curated Color Palette for Per-Person Spend Bar Chart
         const PERSON_COLORS = [
-            "#5c85ff", // Fold Periwinkle Blue
-            "#28c76f", // Fold Emerald Green
-            "#f59e0b", // Amber Gold
-            "#ec4899", // Rose Pink
-            "#a855f7", // Vivid Purple
-            "#06b6d4", // Cyan
-            "#f97316", // Orange
-            "#14b8a6"  // Teal
+            "#5c85ff",
+            "#28c76f",
+            "#f59e0b",
+            "#ec4899",
+            "#a855f7",
+            "#06b6d4",
+            "#f97316",
+            "#14b8a6"
         ];
 
         function getPersonColor(name, evt) {
@@ -1297,7 +1296,6 @@
             return PERSON_COLORS[Math.abs(hash) % PERSON_COLORS.length];
         }
 
-        // Default Monolith SVG Data URI (Matches Fold 1 & Fold 6 surreal green meadow avatar)
         const DEFAULT_MONOLITH_PFP = "data:image/svg+xml;utf8," + encodeURIComponent(`
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
                 <defs>
@@ -1319,7 +1317,6 @@
             </svg>
         `);
 
-        // Generate deterministic geometric fallback avatar for friends added by name
         function generateInitialsAvatar(name) {
             const clean = (name || "U").trim();
             const initial = clean.charAt(0).toUpperCase();
@@ -1335,9 +1332,6 @@
             `);
         }
 
-        // ===================================================================
-        // AUTOMATIC HARDWARE DEVICE & MODEL EXTRACTOR (No User Input)
-        // ===================================================================
         const DeviceIdentity = {
             deviceName: "Detecting Device...",
             deviceId: "DEV-000000",
@@ -1391,13 +1385,8 @@
                 try {
                     if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
                         const entropy = await navigator.userAgentData.getHighEntropyValues(["model", "platform", "platformVersion"]);
-                        if (entropy.model && entropy.model.trim() !== "") {
-                            return entropy.model.trim();
-                        }
-                        if (entropy.platform) {
-                            const br = this.detectBrowserShort();
-                            return `${entropy.platform} • ${br}`;
-                        }
+                        if (entropy.model && entropy.model.trim() !== "") return entropy.model.trim();
+                        if (entropy.platform) return `${entropy.platform} • ${this.detectBrowserShort()}`;
                     }
                 } catch (err) {}
 
@@ -1429,9 +1418,6 @@
             }
         };
 
-        // ===================================================================
-        // BACKEND-COMPATIBLE API SERVICE ADAPTER
-        // ===================================================================
         const ApiService = {
             getHeaders() {
                 const userId = state?.userProfile?.id || "anonymous";
@@ -1445,11 +1431,6 @@
 
             async request(endpoint, method = "GET", body = null) {
                 saveLocalState();
-
-                if (!CONFIG.API_BASE_URL) {
-                    return { ok: true, localOnly: true, data: body };
-                }
-
                 try {
                     const res = await fetch(`${CONFIG.API_BASE_URL}${endpoint}`, {
                         method,
@@ -1465,12 +1446,6 @@
 
             async saveProfile(profile) {
                 return this.request("/api/users/profile", "POST", profile);
-            },
-            async registerAccount(accountPayload) {
-                return this.request("/api/auth/register", "POST", accountPayload);
-            },
-            async loginAccount(loginPayload) {
-                return this.request("/api/auth/login", "POST", loginPayload);
             },
             async createEvent(eventObj) {
                 return this.request("/api/events", "POST", eventObj);
@@ -1495,42 +1470,9 @@
             }
         };
 
-        // ===================================================================
-        // MULTI-USER ACCOUNT REGISTRY & SHARED EVENT STORAGE IN BROWSER
-        // ===================================================================
-        function loadUsersDb() {
-            try {
-                const raw = localStorage.getItem(CONFIG.USERS_DB_KEY);
-                return raw ? JSON.parse(raw) : {};
-            } catch (e) {
-                return {};
-            }
-        }
-
-        function saveUsersDb(db) {
-            try {
-                localStorage.setItem(CONFIG.USERS_DB_KEY, JSON.stringify(db));
-            } catch (e) {}
-        }
-
-        function loadSharedEventsDb() {
-            try {
-                const raw = localStorage.getItem(CONFIG.EVENTS_DB_KEY);
-                return raw ? JSON.parse(raw) : [];
-            } catch (e) {
-                return [];
-            }
-        }
-
-        function saveSharedEventsDb(eventsList) {
-            try {
-                localStorage.setItem(CONFIG.EVENTS_DB_KEY, JSON.stringify(eventsList));
-            } catch (e) {}
-        }
-
         function getCleanInstalledState() {
             return {
-                userProfile: null, // { id, username, pin, name, upi, pfp, deviceName, deviceId, createdAt }
+                userProfile: null,
                 categories: [...DEFAULT_CATEGORIES],
                 activeEventId: null,
                 homeFilter: "ALL",
@@ -1539,7 +1481,7 @@
                 calFilter: "ALL",
                 selectedCalDay: null,
                 calYear: 2026,
-                calMonth: 10, // 0-indexed (10 = November 2026)
+                calMonth: 10,
                 events: []
             };
         }
@@ -1557,20 +1499,11 @@
             const base = getCleanInstalledState();
             try {
                 const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    Object.assign(base, parsed);
-                }
-                const sharedEvts = loadSharedEventsDb();
-                if (sharedEvts.length > 0) {
-                    base.events = sharedEvts;
-                }
-                const activeUsername = localStorage.getItem(CONFIG.SESSION_KEY);
-                const usersDb = loadUsersDb();
-                if (activeUsername && usersDb[activeUsername]) {
-                    base.userProfile = usersDb[activeUsername];
-                } else {
-                    base.userProfile = null;
+                if (raw) Object.assign(base, JSON.parse(raw));
+                const sess = localStorage.getItem(CONFIG.SESSION_KEY);
+                if (sess) {
+                    const parsedSess = JSON.parse(sess);
+                    base.userProfile = parsedSess;
                 }
             } catch (e) {
                 console.warn("Could not read localStorage:", e);
@@ -1580,13 +1513,9 @@
 
         function saveLocalState() {
             try {
-                if (state.userProfile && state.userProfile.username) {
-                    const usersDb = loadUsersDb();
-                    usersDb[state.userProfile.username] = state.userProfile;
-                    saveUsersDb(usersDb);
-                    localStorage.setItem(CONFIG.SESSION_KEY, state.userProfile.username);
+                if (state.userProfile) {
+                    localStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify(state.userProfile));
                 }
-                saveSharedEventsDb(state.events || []);
                 localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state));
             } catch (e) {
                 console.warn("Could not save state:", e);
@@ -1629,16 +1558,6 @@
                     deviceName: mp.deviceName || "Member Device"
                 };
             }
-            const usersDb = loadUsersDb();
-            const foundUser = Object.values(usersDb).find(u => (u.name || "").toLowerCase() === (memberName || "").toLowerCase());
-            if (foundUser) {
-                return {
-                    name: foundUser.name,
-                    upi: foundUser.upi || "",
-                    pfp: foundUser.pfp || generateInitialsAvatar(memberName),
-                    deviceName: foundUser.deviceName || "Member Phone"
-                };
-            }
             return {
                 name: memberName,
                 upi: "",
@@ -1647,9 +1566,6 @@
             };
         }
 
-        // ===================================================================
-        // PFP UPLOAD & HTML5 CANVAS COMPRESSION (Works in Auth & Profile)
-        // ===================================================================
         window.triggerPfpUpload = function() {
             const fileInput = document.getElementById("globalPfpFileInput");
             if (fileInput) {
@@ -1685,19 +1601,9 @@
 
                     if (state.userProfile) {
                         state.userProfile.pfp = compressedDataUrl;
-                        state.events.forEach(evt => {
-                            if (evt.memberProfiles && evt.memberProfiles[state.userProfile.name]) {
-                                evt.memberProfiles[state.userProfile.name].pfp = compressedDataUrl;
-                            }
-                            (evt.expenses || []).forEach(exp => {
-                                if (exp.createdByUserId === state.userProfile.id || exp.createdBy === state.userProfile.name) {
-                                    exp.createdByPfp = compressedDataUrl;
-                                }
-                            });
-                        });
                         ApiService.saveProfile(state.userProfile);
                         renderAll();
-                        showToast("Profile picture updated across all transactions");
+                        showToast("Profile picture updated");
                     }
                 };
                 img.src = e.target.result;
@@ -1705,38 +1611,22 @@
             reader.readAsDataURL(file);
         };
 
-        // ===================================================================
-        // AUTHENTICATION (USERNAME + 4-DIGIT PIN) & INVITE LINK DETECTION
-        // ===================================================================
         function parseInviteFromUrlOrString(rawInput) {
-            let searchStr = "";
             if (typeof rawInput === "string" && rawInput.trim() !== "") {
-                const trimmed = rawInput.trim();
-                if (trimmed.includes("?")) {
-                    searchStr = trimmed.slice(trimmed.indexOf("?"));
-                } else if (trimmed.includes("#event=")) {
-                    const code = decodeURIComponent(trimmed.split("#event=")[1].split("&")[0]);
-                    return { code, title: null, by: null, at: null };
-                } else {
-                    return { code: trimmed, title: null, by: null, at: null };
-                }
-            } else {
-                searchStr = window.location.search;
-                if (!searchStr && (window.location.hash || "").startsWith("#event=")) {
-                    const code = decodeURIComponent(window.location.hash.replace("#event=", ""));
-                    return { code, title: null, by: null, at: null };
-                }
+                const s = rawInput.trim();
+                const m = s.match(/\/e\/([a-z0-9_-]+)/i) || s.match(/[?&]event=([a-z0-9_-]+)/i);
+                if (m) return { code: m[1] };
+                if (/^[a-z0-9_-]+$/i.test(s)) return { code: s };
             }
-
-            const params = new URLSearchParams(searchStr);
-            const code = params.get("event");
-            if (!code) return null;
-            return {
-                code,
-                title: params.get("title") || null,
-                by: params.get("by") || null,
-                at: params.get("at") || null
-            };
+            const path = window.location.pathname;
+            if (path.startsWith("/e/")) {
+                const code = path.replace("/e/", "").split("/")[0].trim();
+                if (code) return { code };
+            }
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("event")) return { code: params.get("event") };
+            if (params.get("e")) return { code: params.get("e") };
+            return null;
         }
 
         window.switchAuthMode = function(mode) {
@@ -1750,7 +1640,6 @@
                 signupView.classList.add("hidden");
                 loginBtn.className = "py-2.5 rounded-xl bg-[#24262d] text-white transition";
                 signupBtn.className = "py-2.5 rounded-xl text-[#8b8e96] hover:text-white transition";
-                renderSavedAccountsList();
             } else {
                 loginView.classList.add("hidden");
                 signupView.classList.remove("hidden");
@@ -1759,67 +1648,18 @@
             }
         };
 
-        function renderSavedAccountsList() {
-            const usersDb = loadUsersDb();
-            const accounts = Object.values(usersDb);
-            const box = document.getElementById("savedAccountsBox");
-            const list = document.getElementById("savedAccountsList");
-            if (!box || !list) return;
-
-            if (accounts.length === 0) {
-                box.classList.add("hidden");
-                return;
-            }
-            box.classList.remove("hidden");
-            list.innerHTML = accounts.map(acc => `
-                <div onclick="prefillSavedAccount('${acc.username}')" class="p-2.5 rounded-xl bg-[#121316] border border-[#23252a] hover:border-fold-blue flex items-center justify-between cursor-pointer transition">
-                    <div class="flex items-center gap-2.5">
-                        <img src="${acc.pfp || DEFAULT_MONOLITH_PFP}" class="w-8 h-8 rounded-full object-cover">
-                        <div>
-                            <div class="text-xs font-bold text-white">${acc.name}</div>
-                            <div class="text-[11px] font-mono text-fold-blueText">@${acc.username}</div>
-                        </div>
-                    </div>
-                    <span class="text-[10px] font-mono px-2 py-1 rounded bg-black text-[#9ca3af]">Tap to Fill ▸</span>
-                </div>
-            `).join("");
-        }
-
-        window.prefillSavedAccount = function(username) {
-            document.getElementById("loginUsernameInput").value = username;
-            document.getElementById("loginPinInput").value = "";
-            document.getElementById("loginPinInput").focus();
-            showToast(`Enter 4-digit PIN for @${username}`);
-        };
-
         function checkOnboardingStatus() {
-            const invite = parseInviteFromUrlOrString();
             document.getElementById("onboardingPfpPreview").src = onboardingTempPfp;
             document.getElementById("onboardingDetectedDeviceName").textContent = DeviceIdentity.deviceName;
             document.getElementById("onboardingDetectedDeviceId").textContent = DeviceIdentity.deviceId;
 
-            if (invite && invite.code) {
-                pendingInvitePayload = invite;
-                document.getElementById("onboardingInviteBanner").classList.remove("hidden");
-                document.getElementById("onboardingInviteTitleText").textContent =
-                    invite.title ? `Invited to "${invite.title}"` : `Event Code: ${invite.code}`;
-                document.getElementById("onboardingInviteCodeText").textContent =
-                    invite.by ? `Created by ${invite.by} • ${invite.at || 'Recently'}` : `Log in or create account to swipe & join`;
-            }
-
-            const usersDb = loadUsersDb();
-            const hasSavedUsers = Object.keys(usersDb).length > 0;
-
             if (!state.userProfile) {
                 document.getElementById("authScreen").classList.remove("hidden");
-                switchAuthMode(hasSavedUsers ? "LOGIN" : "SIGNUP");
+                switchAuthMode("LOGIN");
             } else {
                 state.userProfile.deviceName = DeviceIdentity.deviceName;
                 state.userProfile.deviceId = DeviceIdentity.deviceId;
                 document.getElementById("authScreen").classList.add("hidden");
-                if (pendingInvitePayload) {
-                    checkAndShowSwipeJoinOverlay(pendingInvitePayload);
-                }
             }
         }
 
@@ -1827,47 +1667,32 @@
             const rawUsername = (document.getElementById("loginUsernameInput").value || "").trim().toLowerCase().replace(/^@/, "");
             const rawPin = (document.getElementById("loginPinInput").value || "").trim();
 
-            if (!rawUsername) {
-                showToast("Enter your username", "error");
-                return;
-            }
-            if (!/^\d{4}$/.test(rawPin)) {
-                showToast("Enter your 4-digit numeric PIN", "error");
-                return;
-            }
+            if (!rawUsername) return showToast("Enter your username", "error");
+            if (!/^\d{4}$/.test(rawPin)) return showToast("Enter your 4-digit numeric PIN", "error");
 
-            const usersDb = loadUsersDb();
-            const account = usersDb[rawUsername];
-            if (!account) {
-                showToast(`No account found for @${rawUsername}. Create an account first.`, "error");
-                return;
-            }
-            if (account.pin !== rawPin) {
-                showToast("Incorrect 4-digit PIN", "error");
-                return;
-            }
+            try {
+                const res = await fetch(`${CONFIG.API_BASE_URL}/api/auth/login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: rawUsername,
+                        pin: rawPin,
+                        deviceId: DeviceIdentity.deviceId,
+                        deviceName: DeviceIdentity.deviceName
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) return showToast(data.error || "Login failed", "error");
 
-            account.deviceName = DeviceIdentity.deviceName;
-            account.deviceId = DeviceIdentity.deviceId;
-            state.userProfile = account;
-            saveLocalState();
+                state.userProfile = data.user;
+                saveLocalState();
+                document.getElementById("authScreen").classList.add("hidden");
 
-            await ApiService.loginAccount({
-                username: rawUsername,
-                pin: rawPin,
-                deviceId: DeviceIdentity.deviceId,
-                deviceName: DeviceIdentity.deviceName
-            });
-
-            document.getElementById("authScreen").classList.add("hidden");
-            const myEvts = getVisibleEventsForCurrentUser();
-            state.activeEventId = myEvts[0]?.id || null;
-
-            renderAll();
-            showToast(`Logged in as ${account.name} (@${account.username})`);
-
-            if (pendingInvitePayload) {
-                checkAndShowSwipeJoinOverlay(pendingInvitePayload);
+                await syncEventsWithServer();
+                renderAll();
+                showToast(`Welcome back, ${data.user.name}!`);
+            } catch (err) {
+                showToast("Network error during login", "error");
             }
         };
 
@@ -1878,55 +1703,41 @@
             const upiRaw = (document.getElementById("onboardingUpiInput").value || "").trim();
 
             if (!rawUsername || !/^[a-z0-9_.-]{2,20}$/.test(rawUsername)) {
-                showToast("Enter a valid unique username (letters/numbers)", "error");
-                document.getElementById("signupUsernameInput").focus();
-                return;
+                return showToast("Enter a valid unique username (letters/numbers)", "error");
             }
             if (!/^\d{4}$/.test(rawPin)) {
-                showToast("PIN must be exactly 4 digits (e.g. 1234)", "error");
-                document.getElementById("signupPinInput").focus();
-                return;
+                return showToast("PIN must be exactly 4 digits", "error");
             }
             if (!nameRaw) {
-                showToast("Please enter your display name", "error");
-                document.getElementById("onboardingNameInput").focus();
-                return;
+                return showToast("Please enter your display name", "error");
             }
 
-            const usersDb = loadUsersDb();
-            if (usersDb[rawUsername]) {
-                showToast(`Username @${rawUsername} is already taken. Log in instead.`, "error");
-                switchAuthMode("LOGIN");
-                document.getElementById("loginUsernameInput").value = rawUsername;
-                return;
-            }
+            try {
+                const res = await fetch(`${CONFIG.API_BASE_URL}/api/auth/register`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: rawUsername,
+                        pin: rawPin,
+                        name: nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1),
+                        upi: upiRaw,
+                        pfp: onboardingTempPfp || DEFAULT_MONOLITH_PFP,
+                        deviceId: DeviceIdentity.deviceId,
+                        deviceName: DeviceIdentity.deviceName
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) return showToast(data.error || "Registration failed", "error");
 
-            const cleanName = nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1);
-            const newProfile = {
-                id: "usr_" + rawUsername + "_" + Date.now().toString(36),
-                username: rawUsername,
-                pin: rawPin,
-                name: cleanName,
-                upi: upiRaw,
-                pfp: onboardingTempPfp || DEFAULT_MONOLITH_PFP,
-                deviceName: DeviceIdentity.deviceName,
-                deviceId: DeviceIdentity.deviceId,
-                createdAt: new Date().toISOString()
-            };
+                state.userProfile = data.user;
+                saveLocalState();
+                document.getElementById("authScreen").classList.add("hidden");
 
-            usersDb[rawUsername] = newProfile;
-            saveUsersDb(usersDb);
-            state.userProfile = newProfile;
-            saveLocalState();
-
-            await ApiService.registerAccount(newProfile);
-
-            document.getElementById("authScreen").classList.add("hidden");
-            renderAll();
-            showToast(`Account @${rawUsername} created!`);
-
-            if (pendingInvitePayload) {
-                checkAndShowSwipeJoinOverlay(pendingInvitePayload);
+                await syncEventsWithServer();
+                renderAll();
+                showToast(`Account @${rawUsername} created!`);
+            } catch (err) {
+                showToast("Network error during registration", "error");
             }
         };
 
@@ -1940,40 +1751,25 @@
             showToast("Logged out safely");
         };
 
-        // ===================================================================
-        // SWIPE-TO-APPROVE EVENT INVITE LOGIC
-        // ===================================================================
-        function checkAndShowSwipeJoinOverlay(inviteObj, forcePreview = false) {
+        function checkAndShowSwipeJoinOverlay(inviteObj) {
             if (!inviteObj || !inviteObj.code || !state.userProfile) return;
             const me = state.userProfile;
 
-            let existingEvt = state.events.find(e => e.code.toLowerCase() === inviteObj.code.toLowerCase());
-            if (existingEvt && existingEvt.members.includes(me.name) && !forcePreview) {
+            const existingEvt = state.events.find(e => e.code.toLowerCase() === inviteObj.code.toLowerCase());
+            if (existingEvt && existingEvt.members.includes(me.name)) {
                 state.activeEventId = existingEvt.id;
-                pendingInvitePayload = null;
-                saveLocalState();
                 renderAll();
                 return;
             }
 
-            const eventTitle = existingEvt
-                ? existingEvt.name
-                : (inviteObj.title || inviteObj.code.replace(/-\d+$/, "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "Shared Event");
-
-            const creatorName = existingEvt
-                ? (existingEvt.createdByName || existingEvt.members[0] || "Friend")
-                : (inviteObj.by || "Event Organizer");
-
-            const createdWhen = existingEvt
-                ? (existingEvt.createdAtFormatted || existingEvt.dateStr)
-                : (inviteObj.at || "Today");
-
-            const creatorDetails = getMemberDetails(creatorName, existingEvt);
+            const eventTitle = inviteObj.title || (existingEvt ? existingEvt.name : "Shared Event");
+            const creatorName = inviteObj.by || (existingEvt ? existingEvt.createdByName : "Friend");
+            const createdWhen = inviteObj.at || (existingEvt ? existingEvt.createdAtFormatted : "Today");
 
             document.getElementById("swipeJoinEventIcon").textContent = eventTitle.charAt(0).toUpperCase();
             document.getElementById("swipeJoinEventName").textContent = eventTitle;
             document.getElementById("swipeJoinCreatorName").textContent = creatorName;
-            document.getElementById("swipeJoinCreatorPfp").src = creatorDetails.pfp;
+            document.getElementById("swipeJoinCreatorPfp").src = generateInitialsAvatar(creatorName);
             document.getElementById("swipeJoinCreatedWhen").textContent = createdWhen;
             document.getElementById("swipeJoinUserBadge").textContent = `${me.name} (@${me.username})`;
             document.getElementById("swipeJoinDeviceBadge").textContent = me.deviceName;
@@ -1998,25 +1794,38 @@
                 title: evt.name,
                 by: evt.createdByName || evt.members[0] || state.userProfile.name,
                 at: evt.createdAtFormatted || evt.dateStr
-            }, true);
+            });
         };
 
         window.triggerJoinFromPastedLink = function() {
             const inp = document.getElementById("joinInviteLinkInput");
             const val = (inp.value || "").trim();
-            if (!val) {
-                showToast("Paste an invite link or event code first", "error");
-                return;
-            }
+            if (!val) return showToast("Paste an invite link or code first", "error");
             const parsed = parseInviteFromUrlOrString(val);
-            if (!parsed || !parsed.code) {
-                showToast("Could not detect a valid event code", "error");
-                return;
-            }
+            if (!parsed || !parsed.code) return showToast("Invalid event code", "error");
             inp.value = "";
             closeShareAndPeopleModal();
-            checkAndShowSwipeJoinOverlay(parsed, true);
+            fetchAndPromptJoinEvent(parsed.code);
         };
+
+        async function fetchAndPromptJoinEvent(code) {
+            try {
+                const res = await fetch(`${CONFIG.API_BASE_URL}/api/events/by-code/${code}`);
+                const data = await res.json();
+                if (data.ok && data.event) {
+                    checkAndShowSwipeJoinOverlay({
+                        code: data.event.code,
+                        title: data.event.name,
+                        by: data.event.createdByName || data.event.members[0],
+                        at: data.event.createdAtFormatted || data.event.dateStr
+                    });
+                } else {
+                    showToast("Event not found on server", "error");
+                }
+            } catch (e) {
+                showToast("Could not load event invite", "error");
+            }
+        }
 
         window.declineSwipeJoin = function() {
             pendingInvitePayload = null;
@@ -2027,25 +1836,20 @@
         async function approveJoinEvent() {
             if (!pendingInvitePayload || !state.userProfile) return;
             const me = state.userProfile;
-            const { code, title, by, at } = pendingInvitePayload;
+            const { code } = pendingInvitePayload;
 
             let existingEvt = state.events.find(e => e.code.toLowerCase() === code.toLowerCase());
             if (!existingEvt) {
-                const now = new Date();
-                existingEvt = createEventObject(title || "Shared Event", now.toISOString().slice(0, 10), code);
-                existingEvt.createdByName = by || me.name;
-                existingEvt.createdAtFormatted = at || existingEvt.createdAtFormatted;
-                if (by && !existingEvt.members.includes(by)) {
-                    existingEvt.members.unshift(by);
-                }
-                state.events.unshift(existingEvt);
+                await syncEventsWithServer();
+                existingEvt = state.events.find(e => e.code.toLowerCase() === code.toLowerCase());
             }
 
-            if (!existingEvt.members.includes(me.name)) {
-                existingEvt.members.push(me.name);
+            if (existingEvt) {
+                if (!existingEvt.members.includes(me.name)) existingEvt.members.push(me.name);
+                state.activeEventId = existingEvt.id;
             }
-            if (!existingEvt.memberProfiles) existingEvt.memberProfiles = {};
-            existingEvt.memberProfiles[me.name] = {
+
+            const payload = {
                 name: me.name,
                 upi: me.upi,
                 pfp: me.pfp,
@@ -2053,15 +1857,13 @@
                 deviceId: me.deviceId
             };
 
-            state.activeEventId = existingEvt.id;
+            await ApiService.addParticipant(code, payload);
+            await syncEventsWithServer();
+
             pendingInvitePayload = null;
-            saveLocalState();
-
-            await ApiService.addParticipant(existingEvt.id, existingEvt.memberProfiles[me.name]);
-
             document.getElementById("swipeJoinOverlay").classList.add("hidden");
             renderAll();
-            showToast(`Approved & joined "${existingEvt.name}"!`);
+            showToast(`Approved & joined event!`);
         }
 
         function initSwipeToApproveSlider() {
@@ -2103,9 +1905,7 @@
                     thumb.style.transform = `translateX(${maxDrag}px)`;
                     fill.style.width = "100%";
                     thumb.innerHTML = `<i class="fa-solid fa-check"></i>`;
-                    setTimeout(() => {
-                        approveJoinEvent();
-                    }, 180);
+                    setTimeout(() => approveJoinEvent(), 180);
                 } else {
                     resetSwipeSliderPosition();
                 }
@@ -2135,9 +1935,6 @@
             thumb.innerHTML = `<i class="fa-solid fa-arrow-right"></i>`;
         }
 
-        // ===================================================================
-        // FINANCIAL & SETTLEMENT ENGINE
-        // ===================================================================
         function computeEventFinancials(evt) {
             if (!evt) {
                 return {
@@ -2174,9 +1971,7 @@
                 const cat = exp.category || "Untagged";
                 categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
 
-                if (!stats[exp.paidBy]) {
-                    stats[exp.paidBy] = { paid: 0, share: 0, net: 0 };
-                }
+                if (!stats[exp.paidBy]) stats[exp.paidBy] = { paid: 0, share: 0, net: 0 };
                 stats[exp.paidBy].paid += amt;
 
                 const validParts = (exp.participants || []).filter(p => p);
@@ -2262,9 +2057,6 @@
             };
         }
 
-        // ===================================================================
-        // RENDER ALL VIEWS
-        // ===================================================================
         function renderAll() {
             if (!state.userProfile) return;
             renderHomeTab();
@@ -2274,9 +2066,6 @@
             renderProfileOverlayData();
         }
 
-        // -------------------------------------------------------------------
-        // 1. RENDER HOME TAB (Hidden URL Event Name + Per-Person Color Bar Chart)
-        // -------------------------------------------------------------------
         function renderHomeTab() {
             const me = state.userProfile;
             const evt = getActiveEvent();
@@ -2301,7 +2090,7 @@
                 document.getElementById("homeCategoryBarsList").innerHTML = `
                     <div class="p-6 text-center space-y-3">
                         <div class="text-sm font-semibold text-white">No Event Created Yet</div>
-                        <p class="text-xs text-[#8b8e96]">Create an event for your outing, share the invite link with friends, and track everyone's spends in one place.</p>
+                        <p class="text-xs text-[#8b8e96]">Create an event, share the invite link with friends, and track everyone's spends together.</p>
                         <button onclick="openCreateEventModal()" class="px-4 py-2.5 rounded-xl bg-fold-blue text-black font-extrabold text-xs">
                             + Create First Event Link
                         </button>
@@ -2327,7 +2116,7 @@
 
             renderPeopleSpendBarChart(evt, fin);
 
-            document.getElementById("homeSpendingDateLabel").textContent = evt.dateStr.toUpperCase();
+            document.getElementById("homeSpendingDateLabel").textContent = (evt.dateStr || "EVENT").toUpperCase();
             ["ALL", "UPI", "Cash"].forEach(f => {
                 const btn = document.getElementById(`homeFilter_${f}`);
                 if (!btn) return;
@@ -2353,7 +2142,7 @@
             const catBarsEl = document.getElementById("homeCategoryBarsList");
 
             if (catEntries.length === 0) {
-                catBarsEl.innerHTML = `<div class="text-center py-4 text-xs text-[#686b73]">No expenses added to ${evt.name} yet. Tap "+ Add Spend" above.</div>`;
+                catBarsEl.innerHTML = `<div class="text-center py-4 text-xs text-[#686b73]">No expenses added yet. Tap "+ Add Spend" above.</div>`;
             } else {
                 catBarsEl.innerHTML = catEntries.map(([catName, catSum]) => {
                     const widthPct = Math.max(18, Math.min(100, Math.round((catSum / maxCatAmt) * 75)));
@@ -2426,16 +2215,6 @@
                                         <i class="fa-solid fa-trash-can"></i>
                                     </button>
                                 </div>
-                            </div>
-
-                            <div class="flex flex-wrap items-center gap-1">
-                                <span class="text-[10px] text-[#787b84] mr-1">Participants (${exp.participants.length}):</span>
-                                ${evt.members.map(m => {
-                                    const isIn = exp.participants.includes(m);
-                                    return isIn
-                                        ? `<span class="px-2 py-0.5 rounded-md bg-[#22252d] text-[#e5e7eb] text-[10px] font-medium">${m}</span>`
-                                        : `<span class="px-1.5 py-0.5 rounded-md text-[#52555e] line-through text-[10px]">${m}</span>`;
-                                }).join("")}
                             </div>
                         </div>
                     `;
@@ -2590,29 +2369,16 @@
         }
 
         window.toggleCategoryFilter = function(catName) {
-            if (state.selectedCategoryFilter === catName) {
-                state.selectedCategoryFilter = null;
-            } else {
-                state.selectedCategoryFilter = catName;
-            }
+            state.selectedCategoryFilter = state.selectedCategoryFilter === catName ? null : catName;
             renderHomeTab();
         };
 
-        // -------------------------------------------------------------------
-        // 2. RENDER TRANSACTIONS TAB (Fold 3 UI — Shows Creator's PFP on Every Transaction Card)
-        // -------------------------------------------------------------------
         function renderTransactionsTab() {
             const query = (document.getElementById("txSearchInput")?.value || "").trim().toLowerCase();
-
             const allItems = [];
             getVisibleEventsForCurrentUser().forEach(evt => {
                 (evt.expenses || []).forEach(exp => {
-                    allItems.push({
-                        evtId: evt.id,
-                        evtName: evt.name,
-                        evt,
-                        exp
-                    });
+                    allItems.push({ evtId: evt.id, evtName: evt.name, evt, exp });
                 });
             });
 
@@ -2635,10 +2401,9 @@
             });
 
             document.getElementById("txTotalCountLabel").textContent = `${filtered.length} transaction${filtered.length === 1 ? '' : 's'}`;
-
             const container = document.getElementById("txListContainer");
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="fold-card p-8 text-center text-xs text-[#787b84]">No transactions yet. Add an expense in any event to see it here.</div>`;
+                container.innerHTML = `<div class="fold-card p-8 text-center text-xs text-[#787b84]">No transactions yet. Add an expense to see it here.</div>`;
                 return;
             }
 
@@ -2658,20 +2423,17 @@
                             </div>
                             <span class="text-[13px] text-[#787b84] shrink-0">${exp.timeStr || ''}</span>
                         </div>
-
                         <div class="flex items-center justify-between pt-0.5">
                             <div class="tabular-nums flex items-baseline">
                                 <span class="text-sm text-[#787b84] mr-1">-</span>
                                 <span class="text-xs font-bold text-[#9ca3af] mr-0.5 -translate-y-1.5">₹</span>
                                 <span class="text-[22px] font-extrabold text-white">${Number(exp.amount).toLocaleString("en-IN")}</span>
                             </div>
-
                             <div class="flex items-center gap-2">
                                 <span class="px-3 py-1.5 rounded-full bg-[#090a0c] border border-[#23262e] text-[11px] font-bold tracking-wider uppercase text-[#e5e7eb] flex items-center gap-1.5">
                                     <i class="fa-solid fa-tag text-[10px] text-fold-blueText"></i>
                                     <span>${exp.category || 'EXPENSE'}</span>
                                 </span>
-
                                 <button onclick="toggleExpenseCleared('${evtId}', '${exp.id}')" class="px-3 py-1.5 rounded-full border text-[11px] font-bold tracking-wider uppercase transition ${
                                     exp.cleared
                                         ? 'bg-[#0b1f15] border-fold-green/40 text-fold-green'
@@ -2679,8 +2441,7 @@
                                 }">
                                     ${exp.cleared ? '✓ CLEAR' : 'UNCLEAR'}
                                 </button>
-
-                                <img src="${creatorPfp}" alt="${exp.createdBy}" title="Added by ${exp.createdBy} (${exp.deviceUsed})" class="w-7 h-7 rounded-full object-cover border border-[#323640] shrink-0">
+                                <img src="${creatorPfp}" alt="${exp.createdBy}" class="w-7 h-7 rounded-full object-cover border border-[#323640] shrink-0">
                             </div>
                         </div>
                     </div>
@@ -2688,9 +2449,6 @@
             }).join("");
         }
 
-        // -------------------------------------------------------------------
-        // 3. RENDER EVENTS TAB (Fold 4 UI adapted to Events)
-        // -------------------------------------------------------------------
         function renderEventsTab() {
             let grandTotal = 0;
             const listEl = document.getElementById("eventsPortfolioList");
@@ -2700,7 +2458,7 @@
                 listEl.innerHTML = `
                     <div class="fold-card p-6 text-center space-y-2">
                         <div class="text-sm font-semibold text-white">No Events Created Yet</div>
-                        <p class="text-xs text-[#787b84]">Tap "Create or Join Event Link" below to start tracking an outing with friends.</p>
+                        <p class="text-xs text-[#787b84]">Tap "Create or Join Event Link" below to get started.</p>
                     </div>
                 `;
                 document.getElementById("eventsGrandTotalValue").textContent = "₹0";
@@ -2730,11 +2488,8 @@
                                 </div>
                             </div>
                         </div>
-
                         <button class="px-3.5 py-2 rounded-xl ${
-                            isActive
-                                ? 'bg-fold-blue text-black font-extrabold'
-                                : 'bg-fold-navyPill text-fold-blueText font-bold'
+                            isActive ? 'bg-fold-blue text-black font-extrabold' : 'bg-fold-navyPill text-fold-blueText font-bold'
                         } text-[11px] tracking-wider uppercase shrink-0">
                             ${isActive ? 'ACTIVE' : 'OPEN'}
                         </button>
@@ -2746,9 +2501,6 @@
             document.getElementById("eventsBottomSyncStatus").textContent = `${visibleEvents.length} EVENT${visibleEvents.length === 1 ? '' : 'S'} • AUTO-SYNC ACTIVE`;
         }
 
-        // -------------------------------------------------------------------
-        // 4. RENDER CALENDAR TAB (Fold 5 UI adapted to Events Calendar)
-        // -------------------------------------------------------------------
         function renderCalendarTab() {
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             const monthShortNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -2787,9 +2539,7 @@
             document.getElementById("calMetricCleared").textContent = `₹${clearedSpend.toLocaleString("en-IN")}`;
 
             let cellsHtml = "";
-            for (let b = 0; b < firstDayOfWeek; b++) {
-                cellsHtml += `<div class="h-10"></div>`;
-            }
+            for (let b = 0; b < firstDayOfWeek; b++) cellsHtml += `<div class="h-10"></div>`;
 
             const today = new Date();
             for (let day = 1; day <= daysInMonth; day++) {
@@ -2811,9 +2561,7 @@
                     cellsHtml += `
                         <div onclick="selectCalendarDay(${day})" class="h-10 flex items-center justify-center cursor-pointer">
                             <span class="w-9 h-9 rounded-xl flex items-center justify-center text-[15px] font-semibold ${
-                                isToday || isSelected
-                                    ? 'border border-[#8b8e96] text-white'
-                                    : 'text-[#e5e7eb] hover:bg-[#191b20]'
+                                isToday || isSelected ? 'border border-[#8b8e96] text-white' : 'text-[#e5e7eb] hover:bg-[#191b20]'
                             }">${day}</span>
                         </div>
                     `;
@@ -2862,7 +2610,6 @@
                                     </div>
                                 </div>
                             </div>
-
                             <div class="cal-badge">
                                 <div class="cal-badge-top"></div>
                                 <div class="text-[15px] font-extrabold text-black leading-tight mt-0.5">${evt.dayNum}</div>
@@ -2885,9 +2632,6 @@
             renderCalendarTab();
         };
 
-        // -------------------------------------------------------------------
-        // 5. RENDER PERSONAL PROFILE OVERLAY (Fold 6 UI — Only User's Own Profile)
-        // -------------------------------------------------------------------
         function renderProfileOverlayData() {
             const me = state.userProfile;
             if (!me) return;
@@ -2911,42 +2655,20 @@
         window.savePersonalProfileChanges = async function() {
             const me = state.userProfile;
             if (!me) return;
-            const oldName = me.name;
             const newNameRaw = (document.getElementById("profileNameInput").value || "").trim();
             const newUpiRaw = (document.getElementById("profileUpiInput").value || "").trim();
 
-            if (!newNameRaw) {
-                showToast("Name cannot be empty", "error");
-                return;
-            }
+            if (!newNameRaw) return showToast("Name cannot be empty", "error");
 
-            const newName = newNameRaw.charAt(0).toUpperCase() + newNameRaw.slice(1);
-            me.name = newName;
+            me.name = newNameRaw.charAt(0).toUpperCase() + newNameRaw.slice(1);
             me.upi = newUpiRaw;
 
-            state.events.forEach(evt => {
-                const idx = evt.members.indexOf(oldName);
-                if (idx !== -1) evt.members[idx] = newName;
-                if (evt.memberProfiles) {
-                    delete evt.memberProfiles[oldName];
-                    evt.memberProfiles[newName] = {
-                        name: newName,
-                        upi: me.upi,
-                        pfp: me.pfp,
-                        deviceName: me.deviceName,
-                        deviceId: me.deviceId
-                    };
-                }
-            });
-
             await ApiService.saveProfile(me);
+            saveLocalState();
             renderAll();
-            showToast("Personal profile & UPI ID saved");
+            showToast("Profile & UPI saved");
         };
 
-        // ===================================================================
-        // NAVIGATION & TAB HANDLERS
-        // ===================================================================
         window.switchBottomTab = function(tabName) {
             currentTab = tabName;
             ["HOME", "TRANSACTIONS", "EVENTS", "CALENDAR"].forEach(t => {
@@ -2974,8 +2696,7 @@
         };
 
         window.focusUpiEditInput = function() {
-            const inp = document.getElementById("profileUpiInput");
-            if (inp) inp.focus();
+            document.getElementById("profileUpiInput")?.focus();
         };
 
         window.setHomeFilter = function(f) {
@@ -3036,15 +2757,11 @@
             renderCalendarTab();
         };
 
-        // ===================================================================
-        // ADD EXPENSE MODAL (With Categories + Custom Categories & Silent Stamp)
-        // ===================================================================
         window.openAddExpenseModal = function() {
             const evt = getActiveEvent();
             if (!evt) {
                 openCreateEventModal();
-                showToast("Create an event first before adding expenses");
-                return;
+                return showToast("Create an event first before adding expenses");
             }
 
             modalPayMode = "UPI";
@@ -3078,9 +2795,7 @@
                 const active = modalSelectedCategory === cat;
                 return `
                     <button type="button" onclick="selectExpenseCategory('${cat.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                        active
-                            ? 'bg-fold-blue text-black border-fold-blue font-bold'
-                            : 'bg-black border-[#262930] text-[#d1d5db] hover:border-white/40'
+                        active ? 'bg-fold-blue text-black border-fold-blue font-bold' : 'bg-black border-[#262930] text-[#d1d5db]'
                     }">
                         ${cat}
                     </button>
@@ -3096,9 +2811,7 @@
         window.toggleCustomCategoryBox = function() {
             const box = document.getElementById("customCategoryCreatorBox");
             box.classList.toggle("hidden");
-            if (!box.classList.contains("hidden")) {
-                document.getElementById("newCustomCategoryInput").focus();
-            }
+            if (!box.classList.contains("hidden")) document.getElementById("newCustomCategoryInput")?.focus();
         };
 
         window.saveNewCustomCategory = async function() {
@@ -3135,9 +2848,7 @@
                 const isOn = modalParticipants.has(m);
                 return `
                     <button type="button" onclick="toggleModalParticipant('${m}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                        isOn
-                            ? 'bg-fold-navyPill border-fold-blue text-white'
-                            : 'bg-black border-[#262930] text-[#686b73]'
+                        isOn ? 'bg-fold-navyPill border-fold-blue text-white' : 'bg-black border-[#262930] text-[#686b73]'
                     }">
                         ${isOn ? '✓ ' : ''}${m}
                     </button>
@@ -3165,7 +2876,7 @@
             const count = modalParticipants.size;
             const splitEl = document.getElementById("expPerPersonSplitText");
             if (count > 0 && amount > 0) {
-                splitEl.textContent = `Split among ${count} participant${count > 1 ? 's' : ''} → ₹${Math.round((amount / count) * 100) / 100} / person`;
+                splitEl.textContent = `Split among ${count} → ₹${Math.round((amount / count) * 100) / 100} / person`;
             } else if (count > 0) {
                 splitEl.textContent = `${count} participant${count > 1 ? 's' : ''} selected`;
             } else {
@@ -3183,14 +2894,8 @@
             const paidBy = document.getElementById("expPaidBySelect").value;
             const parts = evt.members.filter(m => modalParticipants.has(m));
 
-            if (!amount || amount <= 0) {
-                showToast("Enter a valid amount in ₹", "error");
-                return;
-            }
-            if (parts.length === 0) {
-                showToast("Select at least 1 participant", "error");
-                return;
-            }
+            if (!amount || amount <= 0) return showToast("Enter a valid amount in ₹", "error");
+            if (parts.length === 0) return showToast("Select at least 1 participant", "error");
 
             const now = new Date();
             const monthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -3220,14 +2925,12 @@
 
             evt.expenses.unshift(newExpense);
             closeAddExpenseModal();
-            await ApiService.createExpense(evt.id, newExpense);
             renderAll();
-            showToast(`Added "${title}" (₹${amount}) under ${modalSelectedCategory}`);
+            await ApiService.createExpense(evt.id, newExpense);
+            await syncEventsWithServer();
+            showToast(`Added "${title}" (₹${amount})`);
         };
 
-        // ===================================================================
-        // SCANNABLE UPI QR CODE GENERATOR & SETTLEMENT WINDOW
-        // ===================================================================
         function renderUpiQrToCanvas(upiUri) {
             const canvas = document.getElementById("upiQrCanvas");
             if (!canvas) return;
@@ -3242,28 +2945,6 @@
                     foreground: "#000000",
                     padding: 8
                 });
-            } else {
-                const ctx = canvas.getContext("2d");
-                ctx.fillStyle = "#ffffff";
-                ctx.fillRect(0, 0, 190, 190);
-                ctx.fillStyle = "#000000";
-                const cells = 21;
-                const cellSize = Math.floor(170 / cells);
-                const offset = 10;
-                let seed = 0;
-                for (let i = 0; i < upiUri.length; i++) seed = (seed * 31 + upiUri.charCodeAt(i)) >>> 0;
-                for (let r = 0; r < cells; r++) {
-                    for (let c = 0; c < cells; c++) {
-                        const isFinder = (r < 7 && c < 7) || (r < 7 && c >= cells - 7) || (r >= cells - 7 && c < 7);
-                        if (isFinder) {
-                            const inOuter = r === 0 || r === 6 || c === 0 || c === 6 || r === cells - 1 || r === cells - 7 || c === cells - 1 || c === cells - 7;
-                            const inInner = (r >= 2 && r <= 4 && c >= 2 && c <= 4) || (r >= 2 && r <= 4 && c >= cells - 5 && c <= cells - 3) || (r >= cells - 5 && r <= cells - 3 && c >= 2 && c <= 4);
-                            if (inOuter || inInner) ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize, cellSize);
-                        } else if (((seed ^ (r * 131 + c * 97)) & 3) !== 0) {
-                            ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize, cellSize);
-                        }
-                    }
-                }
             }
         }
 
@@ -3297,19 +2978,6 @@
             document.getElementById("upiPayVpaBadge").textContent = newVpa;
 
             const evt = getActiveEvent();
-            if (evt) {
-                if (!evt.memberProfiles) evt.memberProfiles = {};
-                if (!evt.memberProfiles[pendingUpiTransfer.to]) {
-                    evt.memberProfiles[pendingUpiTransfer.to] = {
-                        name: pendingUpiTransfer.to,
-                        pfp: generateInitialsAvatar(pendingUpiTransfer.to),
-                        deviceName: "Member Phone"
-                    };
-                }
-                evt.memberProfiles[pendingUpiTransfer.to].upi = newVpa;
-                saveLocalState();
-            }
-
             const eventLabel = evt ? evt.name : "FoldSplit";
             const upiUri = `upi://pay?pa=${encodeURIComponent(newVpa)}&pn=${encodeURIComponent(pendingUpiTransfer.to)}&am=${encodeURIComponent(pendingUpiTransfer.amount)}&cu=INR&tn=${encodeURIComponent(eventLabel + ' Split')}`;
             document.getElementById("upiDeepLinkAnchor").setAttribute("href", upiUri);
@@ -3323,7 +2991,7 @@
 
         window.handleUpiDeepLinkClick = function() {
             if (!pendingUpiTransfer) return;
-            showToast(`Opening UPI App for ${pendingUpiTransfer.vpa} (₹${pendingUpiTransfer.amount})...`);
+            showToast(`Opening UPI App for ${pendingUpiTransfer.vpa}...`);
         };
 
         window.confirmSettlementCleared = async function(method) {
@@ -3344,39 +3012,24 @@
 
             evt.settledTransfers.push(settlementObj);
             closeUpiRedirectModal();
-            await ApiService.recordSettlement(evt.id, settlementObj);
             renderAll();
-            showToast(`${settlementObj.from} settled ₹${settlementObj.amount} with ${settlementObj.to} (${method})`);
+            await ApiService.recordSettlement(evt.id, settlementObj);
+            await syncEventsWithServer();
+            showToast(`Settled ₹${settlementObj.amount} (${method})`);
         };
 
-        // ===================================================================
-        // CREATE EVENT, SHARE LINK & MANAGE PARTICIPANTS MODAL
-        // ===================================================================
         function buildEventShareUrl(evt) {
-            const baseUrl = `${window.location.origin}${window.location.pathname}`;
-            const params = new URLSearchParams({
-                event: evt.code,
-                title: evt.name,
-                by: evt.createdByName || (state.userProfile ? state.userProfile.name : "Organizer"),
-                at: evt.createdAtFormatted || evt.dateStr
-            });
-            return `${baseUrl}?${params.toString()}`;
+            return `${window.location.origin}/e/${evt.code}`;
         }
 
         function createEventObject(title, dateISO, customCode = null) {
             const me = state.userProfile;
             const dt = dateISO ? new Date(dateISO + "T12:00:00") : new Date();
-            const now = new Date();
             const monthShortNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             const monthPretty = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-            const hours = now.getHours();
-            const mins = String(now.getMinutes()).padStart(2, "0");
-            const ampm = hours >= 12 ? "PM" : "AM";
-            const hr12 = hours % 12 || 12;
-            const createdAtFormatted = `${monthPretty[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()} • ${hr12}:${mins} ${ampm}`;
-
-            const slug = customCode || (title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 14) + "-" + String(Math.floor(100 + Math.random() * 900)));
+            const token = Math.random().toString(36).substring(2, 8);
+            const slug = customCode || `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 10)}-${token}`;
 
             return {
                 id: "evt_" + Date.now(),
@@ -3384,7 +3037,7 @@
                 name: title,
                 dateISO: dt.toISOString().slice(0, 10),
                 dateStr: `${monthPretty[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
-                createdAtFormatted,
+                createdAtFormatted: `${monthPretty[dt.getMonth()]} ${dt.getDate()} • ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                 dayNum: dt.getDate(),
                 monthIndex: dt.getMonth(),
                 monthShort: monthShortNames[dt.getMonth()],
@@ -3419,7 +3072,7 @@
             } else {
                 document.getElementById("shareModalHeader").textContent = `${evt.name} — Link & People`;
                 activeSec.classList.remove("hidden");
-                document.getElementById("modalHiddenUrlEventTitle").textContent = `${evt.name} (Created by ${evt.createdByName || evt.members[0]})`;
+                document.getElementById("modalHiddenUrlEventTitle").textContent = `${evt.name}`;
 
                 const listEl = document.getElementById("modalPeopleList");
                 listEl.innerHTML = evt.members.map(m => {
@@ -3453,10 +3106,7 @@
         window.createNewEventFromModal = async function() {
             const title = (document.getElementById("newEventTitleInput").value || "").trim();
             const dateISO = document.getElementById("newEventDateInput").value;
-            if (!title) {
-                showToast("Enter a name for the event", "error");
-                return;
-            }
+            if (!title) return showToast("Enter a name for the event", "error");
 
             const newEvt = createEventObject(title, dateISO);
             state.events.unshift(newEvt);
@@ -3465,10 +3115,11 @@
             state.calMonth = newEvt.monthIndex;
 
             document.getElementById("newEventTitleInput").value = "";
-            await ApiService.createEvent(newEvt);
             renderAll();
             openShareAndPeopleModal();
-            showToast(`Event "${title}" created! Add friends or copy link.`);
+            await ApiService.createEvent(newEvt);
+            await syncEventsWithServer();
+            showToast(`Event "${title}" created!`);
         };
 
         window.addNewPersonToEvent = async function() {
@@ -3477,28 +3128,24 @@
             const nameRaw = (document.getElementById("newPersonNameInput").value || "").trim();
             const upiRaw = (document.getElementById("newPersonUpiInput").value || "").trim();
 
-            if (!nameRaw) {
-                showToast("Enter your friend's name", "error");
-                return;
-            }
+            if (!nameRaw) return showToast("Enter your friend's name", "error");
             const name = nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1);
-            if (!evt.members.includes(name)) {
-                evt.members.push(name);
-            }
+            if (!evt.members.includes(name)) evt.members.push(name);
             if (!evt.memberProfiles) evt.memberProfiles = {};
             evt.memberProfiles[name] = {
                 name,
                 upi: upiRaw,
                 pfp: generateInitialsAvatar(name),
-                deviceName: "Invited via Link"
+                deviceName: "Invited Member"
             };
 
             document.getElementById("newPersonNameInput").value = "";
             document.getElementById("newPersonUpiInput").value = "";
 
-            await ApiService.addParticipant(evt.id, evt.memberProfiles[name]);
             renderAll();
             openShareAndPeopleModal();
+            await ApiService.addParticipant(evt.id, evt.memberProfiles[name]);
+            await syncEventsWithServer();
             showToast(`Added ${name} to ${evt.name}`);
         };
 
@@ -3506,23 +3153,20 @@
             const evt = getActiveEvent();
             if (!evt) {
                 openCreateEventModal();
-                showToast("Create an event first to copy its invite link");
-                return;
+                return showToast("Create an event first to copy invite link");
             }
             const url = buildEventShareUrl(evt);
-            const temp = document.createElement("textarea");
-            temp.value = url;
-            temp.style.position = "fixed";
-            temp.style.left = "-9999px";
-            document.body.appendChild(temp);
-            temp.select();
-            try {
+            navigator.clipboard.writeText(url).then(() => {
+                showToast(`Copied short link for "${evt.name}"!`);
+            }).catch(() => {
+                const temp = document.createElement("textarea");
+                temp.value = url;
+                document.body.appendChild(temp);
+                temp.select();
                 document.execCommand("copy");
-                showToast(`Copied invite link for "${evt.name}"!`);
-            } catch (e) {
-                showToast("Invite link ready");
-            }
-            document.body.removeChild(temp);
+                document.body.removeChild(temp);
+                showToast(`Copied short link for "${evt.name}"!`);
+            });
         };
 
         function showToast(msg, type = "info") {
@@ -3551,10 +3195,25 @@
                     state.events = data.events;
                     saveLocalState();
                     renderAll();
+                    checkPendingInviteStatus();
                 }
-            } catch (e) {
-                // Background fallback to offline cache
+            } catch (e) {}
+        }
+
+        async function checkPendingInviteStatus() {
+            const invite = parseInviteFromUrlOrString();
+            if (!invite || !invite.code || !state.userProfile) return;
+
+            window.history.replaceState({}, document.title, window.location.origin);
+
+            const existing = state.events.find(e => e.code.toLowerCase() === invite.code.toLowerCase());
+            if (existing && existing.members.includes(state.userProfile.name)) {
+                state.activeEventId = existing.id;
+                renderAll();
+                return;
             }
+
+            fetchAndPromptJoinEvent(invite.code);
         }
 
         window.onload = async function() {
@@ -3563,9 +3222,6 @@
             checkOnboardingStatus();
             await syncEventsWithServer();
             renderAll();
-
-            // Background polling: automatically sync every 3.5 seconds
-            // so Phone B sees Phone A's added expenses instantly without reloading!
             setInterval(syncEventsWithServer, 3500);
         };
     </script>
