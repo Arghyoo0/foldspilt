@@ -59,7 +59,7 @@ This project was developed using a modern, lightweight "Vibecoding" architecture
 
 | Dashboard & Charts | Transactions & Clearing | Direct UPI Settlement |
 | :---: | :---: | :---: |
-| <img src=""images\homepage.jpg"" width="250"/> | <img src="images\whom to pay.jpg" width="250"/> | <img src="images\all transactions.jpg" width="250"/> |
+| <img src="images\homepage.jpg" width="250"/> | <img src="images\whom to pay.jpg" width="250"/> | <img src="images\all transactions.jpg" width="250"/> |
 
 ---
 
