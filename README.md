@@ -55,7 +55,7 @@ This project was developed using a modern, lightweight "Vibecoding" architecture
 
 ## 📱 Screenshots
 
-*(Note: Replace the URLs below with the actual paths to the screenshots you uploaded to your repository)*
+
 
 | Dashboard & Charts | Transactions & Clearing | Direct UPI Settlement |
 | :---: | :---: | :---: |
